@@ -123,25 +123,81 @@ class Dicom3D_Coronal_Dataset(Dataset):
         target_path_list = self.data_label_pathlist[idx]
         target_class, patient_num = target_path_list[0].split("-")
 
-        # x(ratio), y(ratio), w(ratio), h(ratio)
-        tbox_max = [0, 0, 0, 0]
+        wh_max = [0, 0] # ratio of (width, height)
+        for target_path in target_path_list[1:]:
+            target_bbox = target_path[1]
+
+            if wh_max[0] < target_bbox[2]:
+                wh_max[0] = target_bbox[2]
+            if wh_max[1] < target_bbox[3]:
+                wh_max[1] = target_bbox[3]
+
+        pixel_width, pixel_height, _ = read_dicom(target_path_list[1][0], self.dicom_HU_width,
+                                                  self.dicom_HU_level).shape
+        for target_path in target_path_list[1:]:
+            target_dicom_path, target_bbox = target_path[0], target_path[1]
+            dicom_pixel = read_dicom(target_dicom_path, self.dicom_HU_width, self.dicom_HU_level)
+
+            target_bbox = target_path[1]
+            target_bbox[2], target_bbox[3] = wh_max
+            tbox = xywh2xyxy(target_bbox)
+            tbox_length = tbox * np.array([pixel_width, pixel_height, pixel_width, pixel_height],
+                                                  dtype=np.float)
+
+            # crop exception of 'out of bounds' position
+            if tbox_length[0] < 0:
+                tbox_length[2] -= tbox_length[0]
+                tbox_length[0] = 0.0
+            if tbox_length[1] < 0:
+                tbox_length[3] -= tbox_length[1]
+                tbox_length[1] = 0.0
+            if tbox_length[2] > pixel_width:
+                tbox_length[0] -= (tbox_length[2] - pixel_width)
+                tbox_length[2] = float(pixel_width)
+            if tbox_length[3] > pixel_height:
+                tbox_length[1] -= (tbox_length[3] - pixel_height)
+                tbox_length[3] = float(pixel_height)
+            # crop type: img[y1:y2, x1:x2]
+            dicom_crop = img_crop(dicom_pixel, tbox_length)
+            #print(f"{dicom_crop.shape} - {tbox_length}")
+
+            if "target" not in target_3D:
+                target_3D["target"] = dicom_crop
+                target_3D["class_num"] = 0 if target_class == "normal" else 1
+                target_3D["source"] = [patient_num, os.path.basename(target_dicom_path)]
+            else:
+                target_3D["target"] = np.append(target_3D["target"], dicom_crop, axis=2)
+
+        '''
+        # tbox_max - ratio of (lt_x, lt_y, rb_x, rb_y)
+        
         for target_path in target_path_list[1:]:
             #target_dicom_path = target_path[0]
             target_bbox = target_path[1]
             #print(f"path: {os.path.basename(target_dicom_path)}, bbox: {target_bbox}")
 
             tbox = xywh2xyxy(target_bbox)
-            if tbox_max[0] > tbox[0]:
-                tbox_max[0] = tbox[0]
-            if tbox_max[1] > tbox[1]:
-                tbox_max[1] = tbox[1]
-            if tbox_max[2] < tbox[2]:
-                tbox_max[2] = tbox[2]
-            if tbox_max[3] < tbox[3]:
-                tbox_max[3] = tbox[3]
+            #target_lt_x = round(tbox[0] - (tbox[2] / 2))
+            #target_lt_y = round(tbox[1] - (tbox[3] / 2))
+            #target_rb_x = round(tbox[0] + (tbox[2] / 2))
+            #target_rb_y = round(tbox[1] + (tbox[3] / 2))
+            target_lt_x, target_lt_y, target_rb_x, target_rb_y = tbox
+            if tbox_max[0] > target_lt_x: # left-top-x update
+                tbox_max[0] = target_lt_x
+            if tbox_max[1] > target_lt_y: # left-top-y update
+                tbox_max[1] = target_lt_y
+            if tbox_max[2] < target_rb_x: # right-bottom-x update
+                tbox_max[2] = target_rb_x
+            if tbox_max[3] < target_rb_y: # right-bottom-y update
+                tbox_max[3] = target_rb_y
+        # tbox_max convert - ratio of (x, y, w, h)
+        #tbox_max[0] = round((tbox_max[0] + tbox_max[2]) / 2)
+        #tbox_max[1] = round((tbox_max[1] + tbox_max[3]) / 2)
+        #tbox_max[2] = round((tbox_max[2] - tbox_max[0]) * 2)
+        #tbox_max[3] = round((tbox_max[3] - tbox_max[1]) * 2)
 
         pixel_width, pixel_height, _ = read_dicom(target_path_list[1][0], self.dicom_HU_width, self.dicom_HU_level).shape
-        tbox_max_length = tbox * np.array([pixel_width, pixel_height, pixel_width, pixel_height], dtype=np.float)
+        tbox_max_length = tbox_max * np.array([pixel_width, pixel_height, pixel_width, pixel_height], dtype=np.float)
         for target_path in target_path_list[1:]:
             target_dicom_path = target_path[0]
             dicom_pixel = read_dicom(target_dicom_path, self.dicom_HU_width, self.dicom_HU_level)
@@ -159,6 +215,7 @@ class Dicom3D_Coronal_Dataset(Dataset):
                 target_3D["target"] = np.append(target_3D["target"], dicom_crop, axis=2)
                 #target_3D["source"].append(target_dicom_path)
         #print(target_3D)
+        '''
 
         if self.transform:
             target_3D = self.transform(target_3D)
@@ -255,13 +312,14 @@ class Tensor3D_Dataset(Dataset):
 
 if __name__ == "__main__":
 
-    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914"
+    #target_dir = "C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914"
+    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/datasets"
     dicom_dir = "/images"
     label_dir = "/labels_yolo"
     dicom_HU_level = 300
     dicom_HU_width = 2500
     cache_num = 100
-    temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp"
+    temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
     isTest = False
 
     dataset = Dicom3D_Coronal_Dataset(
@@ -272,11 +330,11 @@ if __name__ == "__main__":
         dicom_HU_width=dicom_HU_width,
         cache_num=cache_num,
         temp_savepath=temp_savepath,
-        isTest=isTest,
-        transform=transforms.Compose([
-            ToTensor3D(),
-            Rescale3D((64, 128, 128))
-        ])
+        isTest=isTest
+        #transform=transforms.Compose([
+        #    ToTensor3D(),
+        #    Rescale3D((64, 128, 128))
+        #])
     )
 
     height, width, depth = (0, 0, 0)

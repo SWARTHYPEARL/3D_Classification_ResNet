@@ -21,8 +21,13 @@ def xywh2xyxy(x):
 def img_crop(target_image, crop_box):
     # target_image: left-top 2D image, crop_box: [x1, y1, x2, y2]
     # crop: image[y1:y2, x1:x2]
-    crop_box_copy = np.around(crop_box.copy()).astype(np.int)
-    return target_image[crop_box_copy[1]:crop_box_copy[3], crop_box_copy[0]:crop_box_copy[2]]
+    #crop_box_copy = np.around(crop_box.copy()).astype(np.int)
+    y_gap = np.around(crop_box[3] - crop_box[1]).astype(np.int)
+    x_gap = np.around(crop_box[2] - crop_box[0]).astype(np.int)
+    crop_y1 = np.around(crop_box[1]).astype(np.int)
+    crop_x1 = np.around(crop_box[0]).astype(np.int)
+    #return target_image[crop_box_copy[1]:crop_box_copy[3], crop_box_copy[0]:crop_box_copy[2]]
+    return target_image[crop_y1:crop_y1 + y_gap, crop_x1:crop_x1 + x_gap]
 
 def read_dicom(path, window_width, window_level):
     image_medical = pydicom.dcmread(path)
