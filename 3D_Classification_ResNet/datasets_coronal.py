@@ -7,12 +7,17 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 from utils import *
+import hashlib
+import random
 
 import pandas as pd
 f_excel = pd.read_excel("Y:/SP_work/bone_mets_data/bone_mets_0504-01_이희진_중복삭제.xlsx", sheet_name="new_list", index_col="id")
 anatomic_level_list = ["C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2"]
 #print(f_excel["C7"][10021150])
 
+#from train import CACHE_LIST, CACHE_HASH
+#CACHE_LIST = []
+#CACHE_HASH = {}
 
 class Dicom3D_Coronal_Dataset(Dataset):
 
@@ -101,6 +106,7 @@ class Dicom3D_Coronal_Dataset(Dataset):
                     self.data_label_pathlist.append(label_dict[label_dict_key])
 
             # save temp .np files for ssd caching
+            print(f"total dataset: {len(self.data_label_pathlist)}")
             for target_idx in range(len(self.data_label_pathlist)):
                 target_Tensor = self.load_data(target_idx)
 
@@ -294,32 +300,80 @@ class Rescale3D(object):
 
 class Tensor3D_Dataset(Dataset):
 
-    def __init__(self, tensor_dir: str):
+    def __init__(self, tensor_dir: str, cache_num: int = 0, CACHE_LIST: list = None, CACHE_HASH: dict = None):
         """
         Load Tensor format datasets
         :param tensor_dir:
         """
 
         self.tensor_dir = tensor_dir
+        self.cache_num = cache_num
         self.torchTensor_list = glob(self.tensor_dir + "/*.pt")
+
+        self.CACHE_LIST = CACHE_LIST
+        self.CACHE_HASH = CACHE_HASH
+
+        self.cache_dict = {}
 
     def __len__(self):
         return len(self.torchTensor_list)
 
     def __getitem__(self, idx: int):
-        return torch.load(self.torchTensor_list[idx])
+        """
+        :param idx: 3D data num in each dicom directory
+        :return: torch Tensor data with Rescaled
+        """
+
+        if self.cache_num == 0:
+            return torch.load(self.torchTensor_list[idx])
+            #cache_key = hashlib.blake2b(self.torchTensor_list[idx].encode("utf-8"), digest_size=64).hexdigest()
+            #return CACHE_LIST[CACHE_HASH[cache_key]]
+
+
+        #cache_key = hashlib.blake2b(self.torchTensor_list[idx].encode("utf-8"), digest_size=64).hexdigest()
+        #if cache_key not in CACHE_HASH:
+        #    pop_CACHE = None
+        #    if len(CACHE_LIST) == self.cache_num:
+        #        pop_key = random.choice(list(CACHE_HASH.keys()))
+        #        pop_idx = CACHE_HASH.pop(pop_key)
+        #        CACHE_LIST.pop(pop_idx)
+        #    cache_idx = len(CACHE_LIST) if pop_CACHE is None else pop_idx
+        #    CACHE_HASH[cache_key] = cache_idx
+        #    CACHE_LIST.insert(cache_idx, torch.load(self.torchTensor_list[idx]))
+        #return CACHE_LIST[CACHE_HASH[cache_key]]
+
+        cache_key = str(idx)
+        if cache_key not in self.cache_dict:
+            if len(self.cache_dict) == self.cache_num:
+                self.cache_dict.popitem()
+            self.cache_dict[cache_key] = torch.load(self.torchTensor_list[idx])
+        return self.cache_dict[cache_key]
+
+        #cache_key = hashlib.blake2b(self.torchTensor_list[idx].encode("utf-8"), digest_size=64).hexdigest()
+        #if cache_key not in self.CACHE_HASH:
+        #   pop_CACHE = None
+        #   if len(self.CACHE_LIST) == self.cache_num:
+        #       pop_key = random.choice(list(self.CACHE_HASH.keys()))
+        #       pop_idx = self.CACHE_HASH.pop(pop_key)
+        #       self.CACHE_LIST.pop(pop_idx)
+        #   cache_idx = len(self.CACHE_LIST) if pop_CACHE is None else pop_idx
+        #   self.CACHE_HASH[cache_key] = cache_idx
+        #   self.CACHE_LIST.insert(cache_idx, torch.load(self.torchTensor_list[idx]))
+        #return self.CACHE_LIST[self.CACHE_HASH[cache_key]]
+
 
 
 if __name__ == "__main__":
 
-    #target_dir = "C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914"
-    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/datasets"
+    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914"
+    #target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/datasets"
     dicom_dir = "/images"
     label_dir = "/labels_yolo"
     dicom_HU_level = 300
     dicom_HU_width = 2500
     cache_num = 100
-    temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
+    temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp"
+    #temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
     isTest = False
 
     dataset = Dicom3D_Coronal_Dataset(
@@ -330,11 +384,11 @@ if __name__ == "__main__":
         dicom_HU_width=dicom_HU_width,
         cache_num=cache_num,
         temp_savepath=temp_savepath,
-        isTest=isTest
-        #transform=transforms.Compose([
-        #    ToTensor3D(),
-        #    Rescale3D((64, 128, 128))
-        #])
+        isTest=isTest,
+        transform=transforms.Compose([
+            ToTensor3D(),
+            Rescale3D((64, 192, 256))
+        ])
     )
 
     height, width, depth = (0, 0, 0)

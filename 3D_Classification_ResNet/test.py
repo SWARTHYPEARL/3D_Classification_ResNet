@@ -3,16 +3,19 @@ from torchvision import transforms
 
 from ResNet_3D import *
 # from datasets import *
-from datasets_temp import *
+from datasets_coronal import *
 
 from sklearn import metrics
 import matplotlib.pyplot as plt
 from scipy import interpolate
 
+import time
+from utils import AverageMeter
+from collections import defaultdict
 
 def test_model(test_dataset_list: list, model_path_list: list, device: torch.device):
-    predict_list = []
-    label_list = []
+    #predict_list = []
+    #label_list = []
     for idx in range(len(test_dataset_list)):
         test_dataset = test_dataset_list[idx]
         model_path = model_path_list[idx]
@@ -25,9 +28,17 @@ def test_model(test_dataset_list: list, model_path_list: list, device: torch.dev
         #    model = torch.nn.DataParallel(model)
         # model = torch.nn.DataParallel(model)
         print(device)
-        model.to(device)
+        model = model.to(device)
 
-        model.load_state_dict(torch.load(model_path, map_location=device))
+        #model.load_state_dict(torch.load(model_path, map_location=device))
+        checkpoint = torch.load(model_path, map_location=device)
+        model.load_state_dict(checkpoint["state_dict"])
+
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        results = {"results": defaultdict(list)}
+        end_time = time.time()
+
         model.eval()
 
         activation = nn.Softmax(dim=1).to(device)
@@ -38,24 +49,50 @@ def test_model(test_dataset_list: list, model_path_list: list, device: torch.dev
         specificity_list = []
         sensitivity_easy_list = []
         sensitivity_hard_list = []
-        for i, data in enumerate(test_loader, 0):
-            inputs, labels = data["target"].to(device), data["class_num"].to(device)
-            source = data["source"]
-            # print(f"inputs: {inputs}")
-            # print(f"labels: {labels}")
+        with torch.no_grad():
+            for i, data in enumerate(test_loader, 0):
+                inputs, labels = data["target"].to(device), data["class_num"].to(device)
+                source = data["source"]
+                # print(f"inputs: {inputs}")
+                # print(f"labels: {labels}")
 
-            outputs = model(inputs.float())
-            outputs_act = activation(outputs)
-            # print(outputs_act)
+                outputs = model(inputs.float())
+                outputs_act = activation(outputs)
+                # print(outputs_act)
 
-            # _, predicted = torch.max(outputs.data, 1)
-            _, predicted = torch.max(outputs_act.data, 1)
-            label_truth = torch.tensor([0 if label_list[0] == 1 else 1 for label_list in labels]).to(
-                device)  # just for binary class
-            # print(outputs_act)
-            # print(label_truth)
-            # print(outputs_act[range(label_truth.size(0)), label_truth])
+                # _, predicted = torch.max(outputs.data, 1)
+                _, predicted = torch.max(outputs_act.data, 1)
+                #label_truth = torch.tensor([0 if label_list[0] == 1 else 1 for label_list in labels]).to(device)  # just for binary class
+                label_truth = labels
 
+                #print(outputs_act)
+                #print(label_truth)
+                #print(predicted)
+                #print(outputs_act[range(label_truth.size(0)), label_truth])
+
+                label_id = source[0][0]
+                label_file = source[1][0]
+                for batch_idx in range(len(outputs)):
+                    results["results"][f"{label_id}_{label_file}"].append({
+                        #"predict": outputs_act[batch_idx][predicted.item()].item(),
+                        "predict": outputs_act[batch_idx][1].item(),
+                        "label": label_truth[batch_idx].item() # 0 is normal, 1 is lesion
+                    })
+                batch_time.update(time.time() - end_time)
+                end_time = time.time()
+
+                print('[{}/{}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'.format(
+                    i + 1,
+                    len(test_loader),
+                    batch_time=batch_time,
+                    data_time=data_time))
+
+            #print(results)
+
+
+            '''
             for cmp_idx, cmp_elmt in enumerate(predicted != label_truth):
                 if cmp_elmt == 1:
                     print(outputs)
@@ -78,30 +115,46 @@ def test_model(test_dataset_list: list, model_path_list: list, device: torch.dev
                             sensitivity_hard_list.append(1)
                     else:
                         specificity_list.append(1)
+            '''
 
             # predict_tensorlist = torch.cat((predict_tensorlist, outputs_act[range(label_truth.size(0)), label_truth].detach().clone().to(device=torch.device("cpu")).view(outputs_act.size(0), 1)))
-            predict_tensorlist = torch.cat((predict_tensorlist,
-                                            outputs_act[:, 1].detach().clone().to(device=torch.device("cpu")).view(
-                                                outputs_act.size(0), 1)))
-            label_tensorlist = torch.cat((label_tensorlist,
-                                          label_truth.detach().clone().to(device=torch.device("cpu")).view(
-                                              label_truth.size(0), 1)))
+            #predict_tensorlist = torch.cat((predict_tensorlist,
+            #                                outputs_act[:, 1].detach().clone().to(device=torch.device("cpu")).view(
+            #                                    outputs_act.size(0), 1)))
+            #label_tensorlist = torch.cat((label_tensorlist,
+            #                              label_truth.detach().clone().to(device=torch.device("cpu")).view(
+            #                                  label_truth.size(0), 1)))
 
         # print(predict_tensorlist)
-        print(f"Sens-easy[{sum(sensitivity_easy_list)}/{len(sensitivity_easy_list)}]: %0.3f" % (
-                    sum(sensitivity_easy_list) / len(sensitivity_easy_list)))
-        print(f"Sens-hard[{sum(sensitivity_hard_list)}/{len(sensitivity_hard_list)}]: %0.3f" % (
-                    sum(sensitivity_hard_list) / len(sensitivity_hard_list)))
-        print(f"Sensitivity[{sum(sensitivity_list)}/{len(sensitivity_list)}]: %0.3f" % (
-                    sum(sensitivity_list) / len(sensitivity_list)))
-        print(f"Specificity[{sum(specificity_list)}/{len(specificity_list)}]: %0.3f" % (
-                    sum(specificity_list) / len(specificity_list)))
+        #print(f"Sens-easy[{sum(sensitivity_easy_list)}/{len(sensitivity_easy_list)}]: %0.3f" % (
+        #            sum(sensitivity_easy_list) / len(sensitivity_easy_list)))
+        #print(f"Sens-hard[{sum(sensitivity_hard_list)}/{len(sensitivity_hard_list)}]: %0.3f" % (
+        #            sum(sensitivity_hard_list) / len(sensitivity_hard_list)))
+        #print(f"Sensitivity[{sum(sensitivity_list)}/{len(sensitivity_list)}]: %0.3f" % (
+        #            sum(sensitivity_list) / len(sensitivity_list)))
+        #print(f"Specificity[{sum(specificity_list)}/{len(specificity_list)}]: %0.3f" % (
+        #            sum(specificity_list) / len(specificity_list)))
 
-        predict_list.append(predict_tensorlist)
-        label_list.append(label_tensorlist)
+        #predict_list.append(predict_tensorlist)
+        #label_list.append(label_tensorlist)
 
         del model
-    # ROC_curve_plot(predict_list, label_list)
+
+    #print(results["results"].items())
+    predict_list = []
+    label_list = []
+    for target_result in results["results"].items():
+        #print(target_result)
+        label_id_file, target_predict_list = target_result
+        for target_predict in target_predict_list:
+            #predict_list.append(target_predict["predict"] if target_predict["label"] == 1 else 1.0 - target_predict["predict"])
+            predict_list.append(target_predict["predict"])
+            label_list.append(target_predict["label"])
+    print(np.array(predict_list, dtype=np.float))
+    print(np.array(label_list, dtype=np.int))
+
+    #ROC_curve_plot(np.array(predict_list, dtype=np.float), np.array(label_list, dtype=np.int))
+    ROC_curve_plot([predict_list], [label_list])
 
 
 def ROC_curve_plot(predict_list: list, label_list: list):
@@ -122,7 +175,7 @@ def ROC_curve_plot(predict_list: list, label_list: list):
         # print(tpr)
         # print(thresholds)
 
-        fig = plt.figure(figsize=(10, 7), dpi=600)
+        fig = plt.figure(figsize=(4, 4), dpi=600)
 
         f1 = interpolate.interp1d(fpr, tpr)
         fpr_new = np.linspace(fpr.min(), fpr.max(), num=20, endpoint=True)
@@ -138,8 +191,8 @@ def ROC_curve_plot(predict_list: list, label_list: list):
 
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
+        plt.xlabel('False Positive Rate', fontsize=8)
+        plt.ylabel('True Positive Rate', fontsize=8)
         plt.legend(loc="lower right")
 
         # plt.show()
@@ -152,11 +205,15 @@ if __name__ == "__main__":
     # valid_cache_num = 1000
     # isTest = True
 
-    # model_path = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/model/model_trained_last.pth"
+    model_path = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/results/train_211007/ckpt_79.pt"
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
 
+    val_dataset = Tensor3D_Dataset(tensor_dir="C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp/val")
+    test_model([val_dataset], [model_path], device)
+
+    '''
     test_dataset_list = []
     model_path_list = []
     #for idx in range(1):
@@ -170,7 +227,7 @@ if __name__ == "__main__":
         model_path_list.append(model_path)
 
     test_model(test_dataset_list, model_path_list, device)
-
+    '''
     '''
     test_dataset_normal = Dicom3D_CT_Crop_Dataset(
         dicom_dir="D:/billion/training_20210121/Normal_easy",
