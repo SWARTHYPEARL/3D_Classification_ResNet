@@ -8,6 +8,7 @@ from functools import partialmethod
 import torch
 import numpy as np
 from sklearn.metrics import precision_recall_fscore_support
+from glob import glob
 
 def xywh2xyxy(x):
     # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
@@ -153,3 +154,21 @@ def partialclass(cls, *args, **kwargs):
         __init__ = partialmethod(cls.__init__, *args, **kwargs)
 
     return PartialClass
+
+def datalist_from_yolo(text_path: str, temp_dataset_path):
+
+    data_list = []
+    for target_line in open(text_path, "r").readlines():
+        target_id = target_line.split("\\")[-3]
+        if target_id not in data_list:
+            data_list.append(target_id)
+
+    target_list = []
+    for target_path in glob(temp_dataset_path + "/*.pt"):
+        target_3D = torch.load(target_path)
+        source = target_3D["source"]
+
+        if source[0] in data_list:
+            target_list.append(target_path)
+
+    return target_list

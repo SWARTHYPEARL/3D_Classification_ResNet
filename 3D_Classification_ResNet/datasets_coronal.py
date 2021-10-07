@@ -300,7 +300,7 @@ class Rescale3D(object):
 
 class Tensor3D_Dataset(Dataset):
 
-    def __init__(self, tensor_dir: str, cache_num: int = 0, CACHE_LIST: list = None, CACHE_HASH: dict = None):
+    def __init__(self, tensor_dir: str, cache_num: int = 0, torchTensor_list: list = None, CACHE_LIST: list = None, CACHE_HASH: dict = None):
         """
         Load Tensor format datasets
         :param tensor_dir:
@@ -308,7 +308,7 @@ class Tensor3D_Dataset(Dataset):
 
         self.tensor_dir = tensor_dir
         self.cache_num = cache_num
-        self.torchTensor_list = glob(self.tensor_dir + "/*.pt")
+        self.torchTensor_list = glob(self.tensor_dir + "/*.pt") if torchTensor_list is None else torchTensor_list
 
         self.CACHE_LIST = CACHE_LIST
         self.CACHE_HASH = CACHE_HASH

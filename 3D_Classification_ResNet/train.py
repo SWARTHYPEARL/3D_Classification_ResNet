@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from ResNet_3D import r3d_18
 from datasets_coronal import Tensor3D_Dataset
-from utils import AverageMeter, calculate_accuracy, Logger, get_lr
+from utils import AverageMeter, calculate_accuracy, Logger, get_lr, datalist_from_yolo
 from glob import glob
 
 #from sklearn import metrics
@@ -47,9 +47,9 @@ def train_model(opt, log_list):
     train_dataset, val_dataset = torch.utils.data.random_split(target_dataset, [train_dataset_size, val_dataset_size])
     '''
 
-    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.dataset_cache_num)
+    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.dataset_cache_num, opt.datapath_train_list)
     #train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.dataset_cache_num, opt.CACHE_LIST, opt.CACHE_HASH)
-    val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.dataset_cache_num)
+    val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.dataset_cache_num, opt.datapath_val_list)
     #val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.dataset_cache_num, opt.CACHE_LIST, opt.CACHE_HASH)
 
     train_loader = DataLoader(train_dataset, batch_size=opt.train_batch_size, shuffle=True, num_workers=opt.train_num_workers, pin_memory=True)
@@ -212,13 +212,16 @@ if __name__ == "__main__":
     opt.dataset_train_dir = "Y:/SP_work/billion/ubuntu/Python_Project/3D_Classification_ResNet/temp/train"
     #opt.dataset_val_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp/val"
     opt.dataset_val_dir = "Y:/SP_work/billion/ubuntu/Python_Project/3D_Classification_ResNet/temp/val"
+    opt.datapath_train_list = datalist_from_yolo("C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914/train_1.txt", "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp")
+    opt.datapath_val_list = datalist_from_yolo("C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914/val_1.txt", "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp")
+
 
     opt.dataset_dicom_dir = "/images"
     opt.dataset_label_dir = "/labels_yolo"
     opt.dataset_dicom_HU_level = 300
     opt.dataset_dicom_HU_width = 2500
-    opt.dataset_cache_num = 2000
-    #opt.dataset_cache_num = 0
+    #opt.dataset_cache_num = 2000
+    opt.dataset_cache_num = 0
     opt.dataset_temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp"
     opt.dataset_isTest = True
     opt.dataset_val_ratio = 0.1
