@@ -20,8 +20,8 @@ def train_model(opt, log_list):
 
     train_logger, train_batch_logger, val_logger, tb_writer = log_list
 
-    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.datapath_train_list)
-    val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.datapath_val_list)
+    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.datapath_train_list, opt.cache_num)
+    val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.datapath_val_list, opt.cache_num)
 
     train_loader = DataLoader(train_dataset, batch_size=opt.train_batch_size, shuffle=True, num_workers=opt.train_num_workers, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=opt.train_num_workers, pin_memory=True)
@@ -242,6 +242,7 @@ def parse_opts_excel(opt):
 
         opt.dataset_train_dir = f_excel["train_dir"][excel_row]
         opt.dataset_val_dir = f_excel["val_dir"][excel_row]
+        opt.cache_num = f_excel["cache_num"][excel_row]
 
         opt.class_normal = [x.strip() for x in f_excel["class_normal"][excel_row].split(",")]
         opt.class_abnormal = [x.strip() for x in f_excel["class_abnormal"][excel_row].split(",")]

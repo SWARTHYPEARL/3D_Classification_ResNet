@@ -1,5 +1,7 @@
 
-import pydicom
+import platform
+if platform.system() == "Windows":
+    import pydicom
 
 import os
 import uuid
@@ -23,7 +25,7 @@ SPINE_STATUS = ("m", "b", "sct", "so", "x")
 class Dicom3D_Coronal_Dataset(Dataset):
 
     def __init__(self, data_dir: str, dicom_dir: str, label_dir: str, dicom_HU_level: int, dicom_HU_width: int,
-                 data_savepath: str, data_saved: bool = False, transform=None):
+                 data_savepath: str, data_saved: bool = False, transform=None, cache_num: int = 2000):
         """
         :param data_dir: absolute path of directories which contain data
         :param dicom_dir: relative path of dicom directory. ex) /images
@@ -35,6 +37,7 @@ class Dicom3D_Coronal_Dataset(Dataset):
         :param data_savepath: Reformed 3D data save path
         :param data_saved: whether reformed 3D data exist or not
         :param transform: torch transform
+        :param cache_num: number of data for caching
 
         Per data_dir, one directory -> one study
         Each data contains directory name and spine level to identify
@@ -49,6 +52,9 @@ class Dicom3D_Coronal_Dataset(Dataset):
         self.data_savepath = data_savepath
         self.data_saved = data_saved
         self.transform = transform
+
+        self.cache_num = cache_num
+        self.cache_dict = {}
 
         self.data_label_pathlist = []
         self.torchTensor_fullpathlist = []
@@ -243,15 +249,19 @@ class Rescale3D(object):
 
 class Tensor3D_Dataset(Dataset):
 
-    def __init__(self, tensor_dir: str = None, tensor_list: list = None):
+    def __init__(self, tensor_dir: str = None, tensor_list: list = None, cache_num: int = 2000):
         """
         Load Tensor format datasets
         :param tensor_dir: directory path of .pt data
         :param tensor_list: path list of .pt data
+        :param cache_num: number of data for caching
         """
 
         self.tensor_dir = tensor_dir
         self.tensor_list = glob(self.tensor_dir + "/*.pt") if tensor_list is None else tensor_list
+
+        self.cache_num = cache_num
+        self.cache_dict = {}
 
 
     def __len__(self):
@@ -263,7 +273,16 @@ class Tensor3D_Dataset(Dataset):
         :return: torch Tensor data with Rescaled
         """
 
-        return torch.load(self.tensor_list[idx])
+        if self.cache_num == 0:
+            return torch.load(self.tensor_list[idx])
+
+        cache_key = str(idx)
+        if cache_key not in self.cache_dict:
+            if len(self.cache_dict) == self.cache_num:
+                self.cache_dict.popitem()
+            self.cache_dict[cache_key] = torch.load(self.tensor_list[idx])
+
+        return self.cache_dict[cache_key]
 
     def get_tensor_list(self):
         return self.tensor_list

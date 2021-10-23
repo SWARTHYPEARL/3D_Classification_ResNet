@@ -1,5 +1,7 @@
 
-import pydicom
+import platform
+if platform.system() == "Windows":
+    import pydicom
 
 import csv
 import random
