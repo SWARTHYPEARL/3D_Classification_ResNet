@@ -156,21 +156,3 @@ def partialclass(cls, *args, **kwargs):
 
     return PartialClass
 
-def datalist_from_yolo(text_path: str, temp_dataset_path):
-
-    data_list = []
-    for target_line in open(text_path, "r").readlines():
-        target_id = target_line.split("\\")[-3]
-        if target_id not in data_list:
-            data_list.append(target_id)
-
-    target_list = []
-    for target_path in glob(temp_dataset_path + "/*.pt"):
-        target_3D = torch.load(target_path)
-        source = target_3D["source"]
-
-        #print(source[0])
-        if source[0] in data_list:
-            target_list.append(target_path)
-
-    return target_list

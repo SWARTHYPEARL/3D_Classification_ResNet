@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from ResNet_3D import r3d_18
 from datasets_coronal import Tensor3D_Dataset, SPINE_STATUS
-from utils import AverageMeter, calculate_accuracy, Logger, get_lr, datalist_from_yolo
+from utils import AverageMeter, calculate_accuracy, Logger, get_lr
 from glob import glob
 import pandas as pd
 
@@ -201,6 +201,28 @@ def train_model(opt, log_list):
                 ckpt["scheduler"] = scheduler.state_dict()
             torch.save(ckpt, ckpt_path)
 
+def datalist_from_yolo(text_path: str, temp_dataset_path: str, class_normal: list, class_abnormal: list):
+
+    data_list = []
+    for target_line in open(text_path, "r").readlines():
+        target_id = target_line.split("\\")[-3]
+        if target_id not in data_list:
+            data_list.append(target_id)
+
+    target_list = []
+    for target_path in glob(temp_dataset_path + "/*.pt"):
+        target_3D = torch.load(target_path)
+        class_num, source = target_3D["class_num"], target_3D["source"]
+
+        if (SPINE_STATUS[int(class_num)] not in class_normal) and (
+                SPINE_STATUS[int(class_num)] not in class_abnormal):
+            continue
+
+        # print(source[0])
+        if source[0] in data_list:
+            target_list.append(target_path)
+
+    return target_list
 
 def parse_opts_excel(opt):
 
@@ -212,24 +234,25 @@ def parse_opts_excel(opt):
         if excel_case == "":
             break
 
-        parser = argparse.ArgumentParser()
-        opt = parser.parse_args()
+        #parser = argparse.ArgumentParser()
+        #opt = parser.parse_args()
 
         opt.device = f_excel["device"][excel_row]
         opt.multiGPU = False
 
         opt.dataset_train_dir = f_excel["train_dir"][excel_row]
         opt.dataset_val_dir = f_excel["val_dir"][excel_row]
+
+        opt.class_normal = [x.strip() for x in f_excel["class_normal"][excel_row].split(",")]
+        opt.class_abnormal = [x.strip() for x in f_excel["class_abnormal"][excel_row].split(",")]
         if f_excel["train_yolo_txt"][excel_row] == "":
             opt.datapath_train_list = None
         else:
-            opt.datapath_train_list = datalist_from_yolo(f_excel["train_yolo_txt"][excel_row], f_excel["train_dir"][excel_row])
+            opt.datapath_train_list = datalist_from_yolo(f_excel["train_yolo_txt"][excel_row], f_excel["train_dir"][excel_row], opt.class_normal, opt.class_abnormal)
         if f_excel["val_yolo_txt"][excel_row] == "":
             opt.datapath_val_list = None
         else:
-            opt.datapath_val_list = datalist_from_yolo(f_excel["val_yolo_txt"][excel_row], f_excel["val_dir"][excel_row])
-        opt.class_normal = [x.strip() for x in f_excel["class_normal"][excel_row].split(",")]
-        opt.class_abnormal = [x.strip() for x in f_excel["class_abnormal"][excel_row].split(",")]
+            opt.datapath_val_list = datalist_from_yolo(f_excel["val_yolo_txt"][excel_row], f_excel["val_dir"][excel_row], opt.class_normal, opt.class_abnormal)
 
         opt.train_save_path = f_excel["train_save_path"][excel_row] + f"/{int(excel_case)}"
         opt.train_epoch = int(f_excel["train_epoch"][excel_row])
