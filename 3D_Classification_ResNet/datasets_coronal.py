@@ -11,7 +11,8 @@ import hashlib
 import random
 
 import pandas as pd
-f_excel = pd.read_excel("Y:/SP_work/bone_mets_data/bone_mets_0504-01_이희진_중복삭제.xlsx", sheet_name="new_list", index_col="id")
+#f_excel = pd.read_excel("Y:/SP_work/bone_mets_data/bone_mets_0504-01_이희진_중복삭제.xlsx", sheet_name="new_list", index_col="id")
+f_excel = pd.read_excel("bone_mets_0504-01.xlsx", sheet_name="new_list", index_col="id")
 SPINE_LEVEL_LIST = ["C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2"]
 SPINE_STATUS = ("m", "b", "sct", "so", "x")
 #print(f_excel["C7"][10021150])

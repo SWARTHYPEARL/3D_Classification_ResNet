@@ -44,6 +44,7 @@ def train_model(opt, log_list):
 
     criterion = nn.CrossEntropyLoss().to(opt.device)
 
+    print(f"Total epoch: {opt.train_epoch}")
     for _epoch in range(opt.train_epoch):
         # training step
         print("\n >>> Train - Step")
@@ -250,6 +251,7 @@ def parse_opts_excel(opt):
         #break
 
         opt_list.append(opt)
+        #break
 
     #return parser.parse_args()
     #return opt
@@ -262,6 +264,7 @@ if __name__ == "__main__":
 
     #opts_excel_path = "train_sheet.xlsx"
     opt_list = parse_opts_excel(main_opt)
+    #print(opt_list)
 
     for opt in opt_list:
         if not os.path.isdir(opt.train_save_path):
