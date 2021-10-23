@@ -1,10 +1,17 @@
 
 
 import torch
-from glob import glob
 
-dataset_train_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp/train"
-pt_list = glob(dataset_train_dir + "/*.pt")
+TAGET_LIST = [6, 5, 4, 3]
+list1 = 'm, b, sct'
+list2 = 'so, x'
 
-for target_path in pt_list:
-    torch.load(target_path)
+print([x.strip() for x in list1.split(",")])
+
+
+target_tensor = ['m', 'a', 'e', 'sct', 'z']
+for idx, target_elmt in enumerate(target_tensor):
+    if target_elmt in list1:
+        target_tensor[idx] = 1
+
+#print(target_tensor)

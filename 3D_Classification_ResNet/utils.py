@@ -10,6 +10,7 @@ import numpy as np
 from sklearn.metrics import precision_recall_fscore_support
 from glob import glob
 
+
 def xywh2xyxy(x):
     # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
     y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
@@ -36,14 +37,14 @@ def read_dicom(path, window_width, window_level):
 
     image_hu = transform_to_hu(image_medical, image_data)
     image_window = window_image(image_hu.copy(), window_level, window_width)
-    #image_window_norm = resize_normalize(image_window)
+    image_window_norm = resize_normalize(image_window)
 
-    #image_window_norm = np.expand_dims(image_window_norm, axis=2)   # (512, 512, 1)
+    image_window_norm = np.expand_dims(image_window_norm, axis=2)   # (512, 512, 1)
     #image_ths = np.concatenate([image_window_norm, image_window_norm, image_window_norm], axis=2)   # (512, 512, 3)
 
     #return image_ths # use 3-channel
-    #return image_window_norm # use single-channel
-    return np.expand_dims(image_window, axis=2) # use single-channel without norm
+    return image_window_norm # use single-channel
+    #return np.expand_dims(image_window, axis=2) # use single-channel without norm
 
 def transform_to_hu(medical_image, image):
     hu_image = image * medical_image.RescaleSlope + medical_image.RescaleIntercept
@@ -168,6 +169,7 @@ def datalist_from_yolo(text_path: str, temp_dataset_path):
         target_3D = torch.load(target_path)
         source = target_3D["source"]
 
+        #print(source[0])
         if source[0] in data_list:
             target_list.append(target_path)
 

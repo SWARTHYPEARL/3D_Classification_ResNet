@@ -2,7 +2,6 @@
 import os
 import time
 import argparse
-import hashlib
 
 import torch
 import torch.nn as nn
@@ -11,49 +10,20 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from ResNet_3D import r3d_18
-from datasets_coronal import Tensor3D_Dataset
+from datasets_coronal import Tensor3D_Dataset, SPINE_STATUS
 from utils import AverageMeter, calculate_accuracy, Logger, get_lr, datalist_from_yolo
 from glob import glob
+import pandas as pd
 
-#from sklearn import metrics
-#import matplotlib.pyplot as plt
-#from scipy import interpolate
-
-CACHE_LIST = []
-CACHE_HASH = {}
 
 def train_model(opt, log_list):
 
     train_logger, train_batch_logger, val_logger, tb_writer = log_list
 
-    '''
-    target_dataset = Dicom3D_Coronal_Dataset(
-        data_dir=opt.dataset_target_dir,
-        dicom_dir=opt.dataset_dicom_dir,
-        label_dir=opt.dataset_label_dir,
-        dicom_HU_level=opt.dataset_dicom_HU_level,
-        dicom_HU_width=opt.dataset_dicom_HU_width,
-        cache_num=opt.dataset_cache_num,
-        temp_savepath=opt.dataset_temp_savepath,
-        isTest=opt.dataset_isTest,
-        transform=transforms.Compose([
-            ToTensor3D(),
-            Rescale3D((64, 128, 128))
-        ])
-    )
-    target_dataset_size = len(target_dataset)
-    val_dataset_size = int(target_dataset_size * opt.dataset_val_ratio)
-    train_dataset_size = target_dataset_size - val_dataset_size
-    train_dataset, val_dataset = torch.utils.data.random_split(target_dataset, [train_dataset_size, val_dataset_size])
-    '''
-
-    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.dataset_cache_num, opt.datapath_train_list)
-    #train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.dataset_cache_num, opt.CACHE_LIST, opt.CACHE_HASH)
-    val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.dataset_cache_num, opt.datapath_val_list)
-    #val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.dataset_cache_num, opt.CACHE_LIST, opt.CACHE_HASH)
+    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.datapath_train_list)
+    val_dataset = Tensor3D_Dataset(opt.dataset_val_dir, opt.datapath_val_list)
 
     train_loader = DataLoader(train_dataset, batch_size=opt.train_batch_size, shuffle=True, num_workers=opt.train_num_workers, pin_memory=True)
-    #val_loader = DataLoader(val_dataset, batch_size=opt.train_batch_size, shuffle=True, num_workers=opt.train_num_workers)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=opt.train_num_workers, pin_memory=True)
 
     model = r3d_18().float()
@@ -61,8 +31,16 @@ def train_model(opt, log_list):
         model = nn.DataParallel(model)
     model = model.to(opt.device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt.train_initial_lr)#, momentum=0.9)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=opt.train_plateau_patience, min_lr=0.000001)
+    if opt.train_optimizer == "Adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=opt.train_initial_lr, weight_decay=opt.train_weight_decay)#, momentum=0.9)
+    elif opt.train_optimizer == "SGD":
+        if opt.train_nesterov:
+            opt.train_dampening = 0.0
+        optimizer = torch.optim.SGD(model.parameters(), lr=opt.train_initial_lr, momentum=opt.train_momentum, dampening=opt.train_dampening, weight_decay=opt.train_weight_decay, nesterov=opt.train_nesterov)
+    if opt.train_scheduler == "ReduceLROnPlateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=opt.train_plateau_patience, min_lr=0.000001)
+    elif opt.train_scheduler == "MultiStepLR":
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, opt.train_multistep_milestones)
 
     criterion = nn.CrossEntropyLoss().to(opt.device)
 
@@ -81,14 +59,24 @@ def train_model(opt, log_list):
         for idx_batch, data in enumerate(train_loader, 0):
             data_time.update(time.time() - end_time)
 
-            target, class_num, source = data["target"].float().to(opt.device),\
-                                        data["class_num"].long().to(opt.device),\
-                                        data["source"]
+            target, class_num, source = data["target"].float().to(opt.device), data["class_num"], data["source"]
 
             # zero the parameter gradients
             optimizer.zero_grad()
 
             output = model(target)
+
+            #loss = criterion(output, class_num)
+            #class_num = torch.eq(torch.transpose(class_num, 0, 1).squeeze(0), 4).long().to(opt.device)
+            class_num = torch.transpose(class_num, 0, 1).squeeze(0)
+            for class_num_idx, class_num_elmt in enumerate(class_num):
+                if SPINE_STATUS[int(class_num_elmt)] in opt.class_normal:
+                    class_num[class_num_idx] = 0
+                elif SPINE_STATUS[int(class_num_elmt)] in opt.class_abnormal:
+                    class_num[class_num_idx] = 1
+                else:
+                    raise IndexError
+            class_num = class_num.long().to(opt.device)
             loss = criterion(output, class_num)
 
             # accuracy update
@@ -151,10 +139,22 @@ def train_model(opt, log_list):
                 data_time.update(time.time() - end_time)
 
                 target, class_num, source = data["target"].float().to(opt.device), \
-                                            data["class_num"].long().to(opt.device), \
+                                            data["class_num"], \
                                             data["source"]
 
                 output = model(target)
+
+                #loss = criterion(output, class_num)
+                #class_num = torch.eq(torch.transpose(class_num, 0, 1).squeeze(0), 4).long().to(opt.device)
+                class_num = torch.transpose(class_num, 0, 1).squeeze(0)
+                for class_num_idx, class_num_elmt in enumerate(class_num):
+                    if SPINE_STATUS[int(class_num_elmt)] in opt.class_normal:
+                        class_num[class_num_idx] = 0
+                    elif SPINE_STATUS[int(class_num_elmt)] in opt.class_abnormal:
+                        class_num[class_num_idx] = 1
+                    else:
+                        raise IndexError
+                class_num = class_num.long().to(opt.device)
                 loss = criterion(output, class_num)
                 #val_loss = loss
 
@@ -184,24 +184,99 @@ def train_model(opt, log_list):
         if tb_writer is not None:
             tb_writer.add_scalar('val/loss', losses.avg, _epoch)
             tb_writer.add_scalar('val/acc', accuracies.avg, _epoch)
-        scheduler.step(losses.avg)
+        if opt.train_scheduler == "ReduceLROnPlateau":
+            scheduler.step(losses.avg)
+        elif opt.train_scheduler == "MultiStepLR":
+            scheduler.step()
 
         if (_epoch + 1) % opt.train_checkpoint == 0:
             ckpt_path = opt.train_save_path + f"/ckpt_{_epoch}.pt"
             ckpt = {
                 "epoch": _epoch,
                 "state_dict": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "scheduler": scheduler.state_dict()
+                "optimizer": optimizer.state_dict()
             }
+            if opt.train_scheduler is not None:
+                ckpt["scheduler"] = scheduler.state_dict()
             torch.save(ckpt, ckpt_path)
 
 
+def parse_opts_excel(opt):
+
+    f_excel = pd.read_excel(opt.excel_path, sheet_name="Sheet1")
+    f_excel = f_excel.fillna("")
+    #print(f_excel["case"][0])
+    opt_list = []
+    for excel_row, excel_case in enumerate(f_excel["case"]):
+        if excel_case == "":
+            break
+
+        parser = argparse.ArgumentParser()
+        opt = parser.parse_args()
+
+        opt.device = f_excel["device"][excel_row]
+        opt.multiGPU = False
+
+        opt.dataset_train_dir = f_excel["train_dir"][excel_row]
+        opt.dataset_val_dir = f_excel["val_dir"][excel_row]
+        if f_excel["train_yolo_txt"][excel_row] == "":
+            opt.datapath_train_list = None
+        else:
+            opt.datapath_train_list = datalist_from_yolo(f_excel["train_yolo_txt"][excel_row], f_excel["train_dir"][excel_row])
+        if f_excel["val_yolo_txt"][excel_row] == "":
+            opt.datapath_val_list = None
+        else:
+            opt.datapath_val_list = datalist_from_yolo(f_excel["val_yolo_txt"][excel_row], f_excel["val_dir"][excel_row])
+        opt.class_normal = [x.strip() for x in f_excel["class_normal"][excel_row].split(",")]
+        opt.class_abnormal = [x.strip() for x in f_excel["class_abnormal"][excel_row].split(",")]
+
+        opt.train_save_path = f_excel["train_save_path"][excel_row] + f"/{int(excel_case)}"
+        opt.train_epoch = int(f_excel["train_epoch"][excel_row])
+        opt.train_batch_size = int(f_excel["train_batch_size"][excel_row])
+        opt.train_num_workers = int(f_excel["train_num_workers"][excel_row])
+        opt.train_initial_lr = float(f_excel["train_initial_lr"][excel_row])
+        opt.train_checkpoint = int(f_excel["train_checkpoint"][excel_row])
+        opt.train_optimizer = f_excel["train_optimizer"][excel_row]
+        opt.train_momentum = float(f_excel["train_momentum"][excel_row])
+        opt.train_dampening = float(f_excel["train_dampening"][excel_row])
+        opt.train_weight_decay = float(f_excel["train_weight_decay"][excel_row])
+        opt.train_nesterov = True if f_excel["train_nesterov"][excel_row] == "True" else False
+        opt.train_scheduler = None if f_excel["train_scheduler"][excel_row] == "None" else f_excel["train_scheduler"][excel_row]
+        opt.train_plateau_patience = int(f_excel["train_plateau_patience"][excel_row])
+        opt.train_multistep_milestones = [eval(step) for step in f_excel["train_multistep_milestones"][excel_row].split(",")]
+
+        #print(opt)
+        print("I was here, too.")
+        #break
+
+        opt_list.append(opt)
+
+    #return parser.parse_args()
+    #return opt
+    return opt_list
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    opt = parser.parse_args()
+    parser.add_argument("--excel_path", default="train_sheet.xlsx", type=str, help="excel sheet of train list")
+    main_opt = parser.parse_args()
 
+    #opts_excel_path = "train_sheet.xlsx"
+    opt_list = parse_opts_excel(main_opt)
+
+    for opt in opt_list:
+        if not os.path.isdir(opt.train_save_path):
+            os.makedirs(opt.train_save_path)
+
+        train_logger = Logger(opt.train_save_path + "/train.log", ["epoch", "loss", "acc", "lr"])
+        train_batch_logger = Logger(opt.train_save_path + "/train_batch.log", ["epoch", "batch", "iter", "loss", "acc", "lr"])
+        val_logger = Logger(opt.train_save_path + "/val.log", ["epoch", "loss", "acc"])
+        tb_writer = SummaryWriter(log_dir=opt.train_save_path)
+        log_list = [train_logger, train_batch_logger, val_logger, tb_writer]
+
+        train_model(opt, log_list)
+
+    exit(0)
+'''
     opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     opt.multiGPU = False
     #opt.device = "cpu"
@@ -212,50 +287,25 @@ if __name__ == "__main__":
     opt.dataset_train_dir = "Y:/SP_work/billion/ubuntu/Python_Project/3D_Classification_ResNet/temp/train"
     #opt.dataset_val_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp/val"
     opt.dataset_val_dir = "Y:/SP_work/billion/ubuntu/Python_Project/3D_Classification_ResNet/temp/val"
-    opt.datapath_train_list = datalist_from_yolo("C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914/train_1.txt", "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp")
-    opt.datapath_val_list = datalist_from_yolo("C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914/val_1.txt", "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp")
+    opt.datapath_train_list = datalist_from_yolo("C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914/train_1.txt", "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256")
+    opt.datapath_val_list = datalist_from_yolo("C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914/val_1.txt", "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256")
 
-
-    opt.dataset_dicom_dir = "/images"
-    opt.dataset_label_dir = "/labels_yolo"
-    opt.dataset_dicom_HU_level = 300
-    opt.dataset_dicom_HU_width = 2500
-    #opt.dataset_cache_num = 2000
-    opt.dataset_cache_num = 0
-    opt.dataset_temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp"
-    opt.dataset_isTest = True
-    opt.dataset_val_ratio = 0.1
-    opt.dataset_kfold = 1
-
-    opt.train_save_path = "./results/train_test"
-    opt.train_epoch = 1000
-    opt.train_batch_size = 6
+    opt.train_save_path = "./results/train_20211021"
+    opt.train_epoch = 300
+    opt.train_batch_size = 4
     opt.train_num_workers = 0
-    opt.train_initial_lr = 0.1
+    opt.train_initial_lr = 0.01
+    opt.train_checkpoint = 10
+    opt.train_optimizer = "SGD"
+    opt.train_momentum = 0.9
+    opt.train_dampening = 0.0
+    opt.train_weight_decay = 1e-3
+    opt.train_nesterov = False
+    opt.train_scheduler = None
     opt.train_plateau_patience = 10
-    opt.train_checkpoint = int(opt.train_epoch / 100)
-    if not os.path.isdir(opt.train_save_path):
-        os.makedirs(opt.train_save_path)
+    opt.train_multistep_milestones = [50, 100, 150]
+'''
 
-    train_logger = Logger(opt.train_save_path + "/train.log", ["epoch", "loss", "acc", "lr"])
-    train_batch_logger = Logger(opt.train_save_path + "/train_batch.log", ["epoch", "batch", "iter", "loss", "acc", "lr"])
-    val_logger = Logger(opt.train_save_path + "/val.log", ["epoch", "loss", "acc"])
-    tb_writer = SummaryWriter(log_dir=opt.train_save_path)
-    log_list = [train_logger, train_batch_logger, val_logger, tb_writer]
-
-    '''
-    pt_list = glob(opt.dataset_train_dir + "/*.pt")
-    for target_idx, target_pt in enumerate(pt_list):
-        print(f"[{target_idx + 1}/{len(pt_list)}]Caching: {target_pt}")
-        cache_key = hashlib.blake2b(target_pt.encode("utf-8"), digest_size=64).hexdigest()
-        cache_idx = len(CACHE_LIST)
-        CACHE_HASH[cache_key] = cache_idx
-        CACHE_LIST.insert(cache_idx, torch.load(target_pt))
-    opt.CACHE_LIST = CACHE_LIST
-    opt.CACHE_HASH = CACHE_HASH
-    '''
-
-    train_model(opt, log_list)
 
 
 

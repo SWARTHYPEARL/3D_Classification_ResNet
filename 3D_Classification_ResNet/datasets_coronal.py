@@ -12,111 +12,103 @@ import random
 
 import pandas as pd
 f_excel = pd.read_excel("Y:/SP_work/bone_mets_data/bone_mets_0504-01_이희진_중복삭제.xlsx", sheet_name="new_list", index_col="id")
-anatomic_level_list = ["C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2"]
+SPINE_LEVEL_LIST = ["C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2"]
+SPINE_STATUS = ("m", "b", "sct", "so", "x")
 #print(f_excel["C7"][10021150])
 
-#from train import CACHE_LIST, CACHE_HASH
-#CACHE_LIST = []
-#CACHE_HASH = {}
 
 class Dicom3D_Coronal_Dataset(Dataset):
 
-    def __init__(self, data_dir: str, dicom_dir: str, label_dir: str, dicom_HU_level: int, dicom_HU_width: int, cache_num: int,
-                 temp_savepath: str, isTest: bool = False, transform=None):
+    def __init__(self, data_dir: str, dicom_dir: str, label_dir: str, dicom_HU_level: int, dicom_HU_width: int,
+                 data_savepath: str, data_saved: bool = False, transform=None):
         """
-        :param data_dir: absolute path of directories which are in datas
+        :param data_dir: absolute path of directories which contain data
         :param dicom_dir: relative path of dicom directory. ex) /images
         :param label_dir: relative path of label directory. ex) /label
         :param dicom_HU_level: Hounsfield Unit for dicom handling
         :param dicom_HU_width: Hounsfield Unit for dicom handling
         => dicom_dir/"directories"/label_dir/labels.file
+
+        :param data_savepath: Reformed 3D data save path
+        :param data_saved: whether reformed 3D data exist or not
+        :param transform: torch transform
+
+        Per data_dir, one directory -> one study
+        Each data contains directory name and spine level to identify
+        Dicom file name must have extension: '.dcm'
+        Label file must be yolo format.
         """
         self.data_dir = data_dir
         self.dicom_dir = dicom_dir
         self.label_dir = label_dir
         self.dicom_HU_level = dicom_HU_level
         self.dicom_HU_width = dicom_HU_width
-        self.cache_num = cache_num
-        self.temp_savepath = temp_savepath
-        self.isTest = isTest
+        self.data_savepath = data_savepath
+        self.data_saved = data_saved
         self.transform = transform
 
-        self.cache_dict = {}
-
-        self
         self.data_label_pathlist = []
         self.torchTensor_fullpathlist = []
-        if isTest is False:
-            # check data for counting and ...
-            dicom_dir_list = glob(self.data_dir + "/*")
-            for target_CT_path in dicom_dir_list: # repeat per patient
-                if not os.path.isdir(target_CT_path):
+
+        if self.data_saved is False:
+            #dicom_dir_list = glob(self.data_dir + "/*")
+            target_dir_list = glob(self.data_dir + "/*")
+            #for target_CT_path in dicom_dir_list: # repeat per patient
+            for target_dir_path in target_dir_list: # repeat per patient
+                if not os.path.isdir(target_dir_path):
                     continue
                 # print(target_CT_path)
 
-                patient_num = os.path.basename(target_CT_path)
+                #patient_num = os.path.basename(target_CT_path)
+                target_dir_name = os.path.basename(target_dir_path)
                 label_dict = {
-                    # 0: cervical_7, 1: thoracic_1, 2: thoracic_2, 3: thoracic_3, 4: thoracic_4, 5: thoracic_5, 6: thoracic_6, 7: thoracic_7, 8: thoracic_8, 9: thoracic_9, 10: thoracic_10, 11: thoracic_11, 12: thoracic_12, 13: lumber_1, 14: lumber_2
-                    0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: [], 11: [], 12: [],
-                    13: [], 14: []
+                    # Spine level - C: Cervical, T: Thoracic, L: Lumbar
+                    # each level contains [dicom file path, bbox info]
+                    "C7": [], "T1": [], "T2": [], "T3": [], "T4": [], "T5": [], "T6": [], "T7": [], "T8": [], "T9": [], "T10": [], "T11": [], "T12": [],
+                    "L1": [], "L2": []
                 }
-                dicom_label_list = glob(target_CT_path + self.label_dir + "/FILE*.txt")
-                #target_3Ddataset = {}
-                # 집어 넣을 때, label 파일 순서가 아닌 dicom 정보를 통해 정렬되는 방식으로 수정할 것.
-                for path_label in dicom_label_list:
-                    target_dicom_path = target_CT_path + self.dicom_dir + "/" + os.path.basename(path_label).split(".txt")[0] + ".dcm"
-                    #print(target_dicom_path)
-                    if os.path.isfile(target_dicom_path): # check dicom file exist
-                        file_label = open(path_label, "r")
-                        # label_class = file_label.readline().split(" ")[0]
-                        for label_line in file_label.readlines():
+
+                # extract and bind with dicom file and bounding box information
+                target_dicom_list = glob(target_dir_path + self.dicom_dir + "/*")
+                target_dicom_list_sorted = sorted(target_dicom_list, key=lambda x: pydicom.dcmread(x).SliceLocation)
+                for target_dicom_path in target_dicom_list_sorted:
+                    target_label_path = target_dir_path + self.label_dir + "/" + os.path.basename(target_dicom_path).split(".dcm")[0] + ".txt"
+                    if os.path.isfile(target_label_path):
+                        f_target_label = open(target_label_path, "r")
+                        for label_line in f_target_label.readlines():
                             label_line_split = label_line.rstrip().split(" ")
                             label_class = int(label_line_split[0])
                             label_bbox = list(map(float, label_line_split[1:]))
-                            #print(label_bbox)
 
-                            label_dict[label_class].append([target_dicom_path, label_bbox])
-                        #print(label_dict)
-
+                            label_dict[SPINE_LEVEL_LIST[label_class]].append([target_dicom_path, label_bbox])
                     else:
                         continue
 
-                for label_dict_key in label_dict.keys():
-                    if len(label_dict[label_dict_key]) == 0:
+                # Add lesion information of each spine level
+                for target_spine_level in label_dict.keys():
+                    if len(label_dict[target_spine_level]) == 0:
                         continue
-                    anatomical_status = f_excel[anatomic_level_list[label_dict_key]][int(os.path.basename(target_CT_path))]
-                    if anatomical_status == "m":
-                        #print(label_dict[label_dict_key])
-                        label_dict[label_dict_key].insert(0, f"lesion-{patient_num}")
-                    elif anatomical_status == "b":
-                        #print(label_dict[label_dict_key])
-                        label_dict[label_dict_key].insert(0, f"lesion-{patient_num}")
-                    elif anatomical_status == "sct":
-                        #print(label_dict[label_dict_key])
-                        label_dict[label_dict_key].insert(0, f"lesion-{patient_num}")
-                    elif anatomical_status == "so":
-                        #print(label_dict[label_dict_key])
-                        label_dict[label_dict_key].insert(0, f"lesion-{patient_num}")
-                    elif anatomical_status == "x":
-                        #print(label_dict[label_dict_key])
-                        label_dict[label_dict_key].insert(0, f"normal-{patient_num}")
-                    else:
-                        #print(f"nothing-{anatomical_status}: {label_dict[label_dict_key]}")
-                        continue
-                    self.data_label_pathlist.append(label_dict[label_dict_key])
 
-            # save temp .np files for ssd caching
+                    target_spine_status = f_excel[target_spine_level][int(os.path.basename(target_dir_name))]
+                    if target_spine_status in SPINE_STATUS:
+                        label_dict[target_spine_level].insert(0, f"{target_spine_level}-{target_spine_status}-{target_dir_name}")
+                    else:
+                        #print(f"nothing-{target_spine_status}: {label_dict[target_spine_level]}")
+                        continue
+                    self.data_label_pathlist.append(label_dict[target_spine_level])
+
+            # save temp .pt files for ssd caching
             print(f"total dataset: {len(self.data_label_pathlist)}")
             for target_idx in range(len(self.data_label_pathlist)):
                 target_Tensor = self.load_data(target_idx)
 
                 temp_filename = str(uuid.uuid4())
-                temp_fullpath = temp_savepath + "/" + temp_filename + ".pt"
+                temp_fullpath = self.data_savepath + "/" + temp_filename + ".pt"
                 torch.save(target_Tensor, temp_fullpath)
 
                 self.torchTensor_fullpathlist.append(temp_fullpath)
         else:
-            self.torchTensor_fullpathlist = glob(self.temp_savepath + "/*.pt")
+            self.torchTensor_fullpathlist = glob(self.data_savepath + "/*.pt")
 
     def load_data(self, idx: int):
         """
@@ -127,7 +119,8 @@ class Dicom3D_Coronal_Dataset(Dataset):
         # get 3D data
         target_3D = {}
         target_path_list = self.data_label_pathlist[idx]
-        target_class, patient_num = target_path_list[0].split("-")
+        #target_class, patient_num = target_path_list[0].split("-")
+        target_spine_level, target_spine_status, target_dir_name = target_path_list[0].split("-")
 
         wh_max = [0, 0] # ratio of (width, height)
         for target_path in target_path_list[1:]:
@@ -169,59 +162,12 @@ class Dicom3D_Coronal_Dataset(Dataset):
 
             if "target" not in target_3D:
                 target_3D["target"] = dicom_crop
-                target_3D["class_num"] = 0 if target_class == "normal" else 1
-                target_3D["source"] = [patient_num, os.path.basename(target_dicom_path)]
+                #target_3D["class_num"] = 0 if target_class == "normal" else 1
+                target_3D["class_num"] = SPINE_STATUS.index(target_spine_status)
+                #target_3D["source"] = [patient_num, os.path.basename(target_dicom_path)]
+                target_3D["source"] = [target_dir_name, target_spine_level]
             else:
                 target_3D["target"] = np.append(target_3D["target"], dicom_crop, axis=2)
-
-        '''
-        # tbox_max - ratio of (lt_x, lt_y, rb_x, rb_y)
-        
-        for target_path in target_path_list[1:]:
-            #target_dicom_path = target_path[0]
-            target_bbox = target_path[1]
-            #print(f"path: {os.path.basename(target_dicom_path)}, bbox: {target_bbox}")
-
-            tbox = xywh2xyxy(target_bbox)
-            #target_lt_x = round(tbox[0] - (tbox[2] / 2))
-            #target_lt_y = round(tbox[1] - (tbox[3] / 2))
-            #target_rb_x = round(tbox[0] + (tbox[2] / 2))
-            #target_rb_y = round(tbox[1] + (tbox[3] / 2))
-            target_lt_x, target_lt_y, target_rb_x, target_rb_y = tbox
-            if tbox_max[0] > target_lt_x: # left-top-x update
-                tbox_max[0] = target_lt_x
-            if tbox_max[1] > target_lt_y: # left-top-y update
-                tbox_max[1] = target_lt_y
-            if tbox_max[2] < target_rb_x: # right-bottom-x update
-                tbox_max[2] = target_rb_x
-            if tbox_max[3] < target_rb_y: # right-bottom-y update
-                tbox_max[3] = target_rb_y
-        # tbox_max convert - ratio of (x, y, w, h)
-        #tbox_max[0] = round((tbox_max[0] + tbox_max[2]) / 2)
-        #tbox_max[1] = round((tbox_max[1] + tbox_max[3]) / 2)
-        #tbox_max[2] = round((tbox_max[2] - tbox_max[0]) * 2)
-        #tbox_max[3] = round((tbox_max[3] - tbox_max[1]) * 2)
-
-        pixel_width, pixel_height, _ = read_dicom(target_path_list[1][0], self.dicom_HU_width, self.dicom_HU_level).shape
-        tbox_max_length = tbox_max * np.array([pixel_width, pixel_height, pixel_width, pixel_height], dtype=np.float)
-        for target_path in target_path_list[1:]:
-            target_dicom_path = target_path[0]
-            dicom_pixel = read_dicom(target_dicom_path, self.dicom_HU_width, self.dicom_HU_level)
-
-            #crop type: img[y1:y2, x1:x2]
-            dicom_crop = img_crop(dicom_pixel, tbox_max_length)
-
-            if "target" not in target_3D:
-                target_3D["target"] = dicom_crop
-                #target_3D["class_num"] = "0" if int(label_class) < 12 else "1"
-                #target_3D["class_num"] = np.array([1, 0]) if target_class == "normal" else np.array([0, 1])
-                target_3D["class_num"] = 0 if target_class == "normal" else 1
-                target_3D["source"] = [patient_num, os.path.basename(target_dicom_path)]
-            else:
-                target_3D["target"] = np.append(target_3D["target"], dicom_crop, axis=2)
-                #target_3D["source"].append(target_dicom_path)
-        #print(target_3D)
-        '''
 
         if self.transform:
             target_3D = self.transform(target_3D)
@@ -237,16 +183,9 @@ class Dicom3D_Coronal_Dataset(Dataset):
         :return: torch Tensor data with Rescaled
         """
 
-        if self.cache_num == 0:
-            return torch.load(self.torchTensor_fullpathlist[idx])
+        return torch.load(self.torchTensor_fullpathlist[idx])
 
-        cache_key = str(idx)
-        if cache_key not in self.cache_dict:
-            if len(self.cache_dict) == self.cache_num:
-                self.cache_dict.popitem()
-            self.cache_dict[cache_key] = torch.load(self.torchTensor_fullpathlist[idx])
 
-        return self.cache_dict[cache_key]
 
 
 class ToTensor3D(object):
@@ -265,13 +204,14 @@ class ToTensor3D(object):
         # target = np.expand_dims(target, axis=0)  # expand dim for mini-batch. squeeze after converting torch Tensor
         return {"target": torch.from_numpy(target),
                 # "class_num": torch.from_numpy(np.array(class_num, dtype=np.int)),
-                "class_num": class_num,
+                "class_num": torch.Tensor([class_num]),
                 "source": source}
 
 
 class Rescale3D(object):
     """
     3D data rescale in torch Tensor
+
     """
 
     def __init__(self, output_size):
@@ -300,23 +240,19 @@ class Rescale3D(object):
 
 class Tensor3D_Dataset(Dataset):
 
-    def __init__(self, tensor_dir: str, cache_num: int = 0, torchTensor_list: list = None, CACHE_LIST: list = None, CACHE_HASH: dict = None):
+    def __init__(self, tensor_dir: str = None, tensor_list: list = None):
         """
         Load Tensor format datasets
-        :param tensor_dir:
+        :param tensor_dir: directory path of .pt data
+        :param tensor_list: path list of .pt data
         """
 
         self.tensor_dir = tensor_dir
-        self.cache_num = cache_num
-        self.torchTensor_list = glob(self.tensor_dir + "/*.pt") if torchTensor_list is None else torchTensor_list
+        self.tensor_list = glob(self.tensor_dir + "/*.pt") if tensor_list is None else tensor_list
 
-        self.CACHE_LIST = CACHE_LIST
-        self.CACHE_HASH = CACHE_HASH
-
-        self.cache_dict = {}
 
     def __len__(self):
-        return len(self.torchTensor_list)
+        return len(self.tensor_list)
 
     def __getitem__(self, idx: int):
         """
@@ -324,43 +260,16 @@ class Tensor3D_Dataset(Dataset):
         :return: torch Tensor data with Rescaled
         """
 
-        if self.cache_num == 0:
-            return torch.load(self.torchTensor_list[idx])
-            #cache_key = hashlib.blake2b(self.torchTensor_list[idx].encode("utf-8"), digest_size=64).hexdigest()
-            #return CACHE_LIST[CACHE_HASH[cache_key]]
+        return torch.load(self.tensor_list[idx])
 
+    def get_tensor_list(self):
+        return self.tensor_list
 
-        #cache_key = hashlib.blake2b(self.torchTensor_list[idx].encode("utf-8"), digest_size=64).hexdigest()
-        #if cache_key not in CACHE_HASH:
-        #    pop_CACHE = None
-        #    if len(CACHE_LIST) == self.cache_num:
-        #        pop_key = random.choice(list(CACHE_HASH.keys()))
-        #        pop_idx = CACHE_HASH.pop(pop_key)
-        #        CACHE_LIST.pop(pop_idx)
-        #    cache_idx = len(CACHE_LIST) if pop_CACHE is None else pop_idx
-        #    CACHE_HASH[cache_key] = cache_idx
-        #    CACHE_LIST.insert(cache_idx, torch.load(self.torchTensor_list[idx]))
-        #return CACHE_LIST[CACHE_HASH[cache_key]]
+    def set_tensor_list(self, tensor_list: list):
+        self.tensor_list = tensor_list
 
-        cache_key = str(idx)
-        if cache_key not in self.cache_dict:
-            if len(self.cache_dict) == self.cache_num:
-                self.cache_dict.popitem()
-            self.cache_dict[cache_key] = torch.load(self.torchTensor_list[idx])
-        return self.cache_dict[cache_key]
-
-        #cache_key = hashlib.blake2b(self.torchTensor_list[idx].encode("utf-8"), digest_size=64).hexdigest()
-        #if cache_key not in self.CACHE_HASH:
-        #   pop_CACHE = None
-        #   if len(self.CACHE_LIST) == self.cache_num:
-        #       pop_key = random.choice(list(self.CACHE_HASH.keys()))
-        #       pop_idx = self.CACHE_HASH.pop(pop_key)
-        #       self.CACHE_LIST.pop(pop_idx)
-        #   cache_idx = len(self.CACHE_LIST) if pop_CACHE is None else pop_idx
-        #   self.CACHE_HASH[cache_key] = cache_idx
-        #   self.CACHE_LIST.insert(cache_idx, torch.load(self.torchTensor_list[idx]))
-        #return self.CACHE_LIST[self.CACHE_HASH[cache_key]]
-
+    def pop_tensor_list(self, idx: int):
+        del self.tensor_list[idx]
 
 
 if __name__ == "__main__":
@@ -371,10 +280,9 @@ if __name__ == "__main__":
     label_dir = "/labels_yolo"
     dicom_HU_level = 300
     dicom_HU_width = 2500
-    cache_num = 100
-    temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp"
+    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256"
     #temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
-    isTest = False
+    data_saved = False
 
     dataset = Dicom3D_Coronal_Dataset(
         data_dir=target_dir,
@@ -382,12 +290,11 @@ if __name__ == "__main__":
         label_dir=label_dir,
         dicom_HU_level=dicom_HU_level,
         dicom_HU_width=dicom_HU_width,
-        cache_num=cache_num,
-        temp_savepath=temp_savepath,
-        isTest=isTest,
+        data_savepath=data_savepath,
+        data_saved=data_saved,
         transform=transforms.Compose([
             ToTensor3D(),
-            Rescale3D((64, 192, 256))
+            Rescale3D((64, 256, 256))
         ])
     )
 
