@@ -224,7 +224,11 @@ def datalist_from_yolo(text_path: str, temp_dataset_path: str, class_normal: lis
 
     return target_list
 
-def parse_opts_excel(opt):
+def parse_opts_excel():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--excel_path", default="train_sheet.xlsx", type=str, help="excel sheet of train list")
+    opt = parser.parse_args()
 
     f_excel = pd.read_excel(opt.excel_path, sheet_name="Sheet1")
     f_excel = f_excel.fillna("")
@@ -235,7 +239,7 @@ def parse_opts_excel(opt):
             break
 
         #parser = argparse.ArgumentParser()
-        #opt = parser.parse_args()
+        opt = parser.parse_args()
 
         opt.device = f_excel["device"][excel_row]
         opt.multiGPU = False
@@ -282,15 +286,12 @@ def parse_opts_excel(opt):
     return opt_list
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--excel_path", default="train_sheet.xlsx", type=str, help="excel sheet of train list")
-    main_opt = parser.parse_args()
 
-    #opts_excel_path = "train_sheet.xlsx"
-    opt_list = parse_opts_excel(main_opt)
+    opt_list = parse_opts_excel()
     #print(opt_list)
 
     for opt in opt_list:
+
         if not os.path.isdir(opt.train_save_path):
             os.makedirs(opt.train_save_path)
 
