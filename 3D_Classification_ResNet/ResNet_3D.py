@@ -239,6 +239,16 @@ def r3d_18(pretrained=False, progress=True, **kwargs):
                          layers=[2, 2, 2, 2],
                          stem=BasicStem, **kwargs)
 
+def load_pretrained_model(model, pretrained_path, n_finetune_classes = None):
+    print("loading pretrained model {}".format(pretrained_path))
+    pretrained = torch.load(pretrained_path, map_location="cpu")
+
+    model.load_state_dict(pretrained["state_dict"])
+
+    if n_finetune_classes is not None:
+        model.fc = nn.Linear(model.fc.in_features, n_finetune_classes)
+
+    return model
 
 if __name__ == "__main__":
 

@@ -1,6 +1,16 @@
 
-import platform
+from torchvision import transforms
 
-if platform.system() == "Windows":
-    from glob import glob
-print(glob("./*"))
+import datasets_coronal
+from datasets_coronal import ToTensor3D, Padding3D
+
+if __name__ == "__main__":
+
+    data_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop"
+    save_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop_tensor"
+
+    datasets_coronal.Transform_Only(data_dir, save_dir,
+                                    transform=transforms.Compose([
+                                        ToTensor3D(),
+                                        Padding3D((64, 192, 256))])
+                                    )

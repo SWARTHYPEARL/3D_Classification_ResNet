@@ -183,6 +183,82 @@ class Dicom3D_Coronal_Dataset(Dataset):
 
         return target_3D
 
+    def load_data_zero_padding(self, idx:int):
+        """
+                :param idx: 3D data num in each dicom directory
+                :return: torch Tensor data with Rescaled
+                """
+
+        # get 3D data
+        target_3D = {}
+        target_path_list = self.data_label_pathlist[idx]
+        # target_class, patient_num = target_path_list[0].split("-")
+        target_spine_level, target_spine_status, target_dir_name = target_path_list[0].split("-")
+
+        wh_max = [0, 0]  # ratio of (width, height)
+        for target_path in target_path_list[1:]:
+            target_bbox = target_path[1]
+
+            if wh_max[0] < target_bbox[2]:
+                wh_max[0] = target_bbox[2]
+            if wh_max[1] < target_bbox[3]:
+                wh_max[1] = target_bbox[3]
+
+        pixel_width, pixel_height, _ = read_dicom(target_path_list[1][0], self.dicom_HU_width,
+                                                  self.dicom_HU_level).shape
+        for target_path in target_path_list[1:]:
+            target_dicom_path, target_bbox = target_path[0], target_path[1]
+            dicom_pixel = read_dicom(target_dicom_path, self.dicom_HU_width, self.dicom_HU_level)
+
+            target_bbox = target_path[1]
+            #target_bbox[2], target_bbox[3] = wh_max
+            tbox = xywh2xyxy(target_bbox)
+            tbox_length = tbox * np.array([pixel_width, pixel_height, pixel_width, pixel_height],
+                                          dtype=np.float)
+
+            # crop exception of 'out of bounds' position
+            if tbox_length[0] < 0:
+                tbox_length[2] -= tbox_length[0]
+                tbox_length[0] = 0.0
+            if tbox_length[1] < 0:
+                tbox_length[3] -= tbox_length[1]
+                tbox_length[1] = 0.0
+            if tbox_length[2] > pixel_width:
+                tbox_length[0] -= (tbox_length[2] - pixel_width)
+                tbox_length[2] = float(pixel_width)
+            if tbox_length[3] > pixel_height:
+                tbox_length[1] -= (tbox_length[3] - pixel_height)
+                tbox_length[3] = float(pixel_height)
+            # crop type: img[y1:y2, x1:x2]
+            dicom_crop = img_crop(dicom_pixel, tbox_length)
+            # print(f"{dicom_crop.shape} - {tbox_length}")
+
+            # zero padding
+            pad_width, pad_height = wh_max * np.array([pixel_width, pixel_height], dtype=np.float)
+            crop_height, crop_width = dicom_crop.shape
+            top_padding = int((pad_height - crop_height) / 2)
+            bottom_padding = int((pad_height - crop_height)) - top_padding
+            left_padding = int((pad_width - crop_width) / 2)
+            right_padding = int((pad_width - crop_width)) - left_padding
+
+            dicom_padding = np.pad(dicom_crop, ((top_padding, bottom_padding), (left_padding, right_padding)), "constant", constant_values=0)
+
+            if "target" not in target_3D:
+                #target_3D["target"] = dicom_crop
+                target_3D["target"] = dicom_padding
+                # target_3D["class_num"] = 0 if target_class == "normal" else 1
+                target_3D["class_num"] = SPINE_STATUS.index(target_spine_status)
+                target_3D["source"] = [target_dir_name, target_spine_level]
+            else:
+                #target_3D["target"] = np.append(target_3D["target"], dicom_crop, axis=2)
+                target_3D["target"] = np.append(target_3D["target"], dicom_padding, axis=2)
+
+        if self.transform:
+            target_3D = self.transform(target_3D)
+
+        return target_3D
+
+
     def __len__(self):
         return len(self.torchTensor_fullpathlist)
 
@@ -247,6 +323,53 @@ class Rescale3D(object):
                 "source": source}
 
 
+class Padding3D(object):
+    """
+        3D data rescale in torch Tensor
+
+        """
+
+    def __init__(self, output_size):
+        """
+        :param output_size: tuple - (D, H, W)
+        """
+        assert isinstance(output_size, (int, tuple))
+        self.output_size = output_size
+
+    def __call__(self, target_3D):
+        target, class_num = target_3D["target"], target_3D["class_num"]
+        source = target_3D["source"]
+        print(f"init shape: {target.shape}")
+
+        target_depth, target_height, target_width = target.shape
+        target_resize = None
+        # resize (H, W)
+        for idx_depth in range(target_depth):
+            target_slice = target[idx_depth, :, :]
+
+            target_slice = target_slice.unsqueeze(0)
+            target_slice = target_slice.unsqueeze(0)
+
+            target_slice_resize = torch.nn.functional.interpolate(target_slice, self.output_size[1:])
+            if target_resize is None:
+                target_resize = target_slice_resize.detach().clone()
+            else:
+                target_resize = torch.cat([target_resize, target_slice_resize], dim=1)
+
+        # resize (D)
+        for count_padding in range(self.output_size[0] - target_depth):
+            slice_zero = torch.zeros(1, 1, self.output_size[1], self.output_size[2])
+            if (count_padding % 2) == 1:
+                target_resize = torch.cat([target_resize, slice_zero], dim=1)
+            else:
+                target_resize = torch.cat([slice_zero, target_resize], dim=1)
+
+        #print(f"resized shape: {target_resize.shape}")
+        return {"target": target_resize,
+                "class_num": class_num,
+                "source": source}
+
+
 class Tensor3D_Dataset(Dataset):
 
     def __init__(self, tensor_dir: str = None, tensor_list: list = None, cache_num: int = 2000):
@@ -293,6 +416,20 @@ class Tensor3D_Dataset(Dataset):
     def pop_tensor_list(self, idx: int):
         del self.tensor_list[idx]
 
+class Transform_Only(Dataset):
+    def __init__(self, data_dir: str, save_dir: str, transform=None):
+        self.data_dir = data_dir
+        self.save_dir = save_dir
+        self.transform = transform
+
+        for target_path in glob(data_dir + "/*.pt"):
+            target_3D = torch.load(target_path)
+            target_Tensor = self.transform(target_3D)
+
+            temp_filename = str(uuid.uuid4())
+            temp_fullpath = self.save_dir + "/" + temp_filename + ".pt"
+            torch.save(target_Tensor, temp_fullpath)
+
 
 if __name__ == "__main__":
 
@@ -302,7 +439,8 @@ if __name__ == "__main__":
     label_dir = "/labels_yolo"
     dicom_HU_level = 300
     dicom_HU_width = 2500
-    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256"
+    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop"
+    #data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256"
     #temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
     data_saved = False
 
@@ -313,17 +451,18 @@ if __name__ == "__main__":
         dicom_HU_level=dicom_HU_level,
         dicom_HU_width=dicom_HU_width,
         data_savepath=data_savepath,
-        data_saved=data_saved,
-        transform=transforms.Compose([
-            ToTensor3D(),
-            Rescale3D((64, 256, 256))
-        ])
+        data_saved=data_saved
+        #transform=transforms.Compose([
+            #ToTensor3D(),
+            #Rescale3D((64, 192, 256))
+            #Rescale3D((64, 256, 256))
+        #])
     )
 
     height, width, depth = (0, 0, 0)
     for target in dataset:
 
-        _, target_height, target_width, target_depth = target["target"].shape
+        target_height, target_width, target_depth = target["target"].shape
 
         #height += target_height
         #width += target_width
