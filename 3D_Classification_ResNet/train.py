@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.multiprocessing as mp
 import torch.distributed as dist
 
-from ResNet_3D import r3d_18, load_pretrained_model
+from ResNet_3D import r3d_18, r3d_34, load_pretrained_model
 from datasets_coronal import Tensor3D_Dataset, SPINE_STATUS
 from utils import AverageMeter, ProgressMeter, accuracy, calculate_accuracy, Logger, get_lr
 from glob import glob
@@ -47,6 +47,7 @@ def main_worker(device, ngpus_per_node, opt):
 
     # create model with parallel or not
     model = r3d_18().float()
+    #model = r3d_34().float()
     if opt.pretrained_path is not None:
         model = load_pretrained_model(model, opt.pretrained_path)
 
@@ -264,7 +265,7 @@ def validate(val_loader, model, criterion, scheduler, epoch, opt, tb_writer):
         #print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
         #      .format(top1=top1, top5=top5))
         print(' * Acc@1 {top1.avg:.3f}'
-              .format(top1=top1))
+              .format(top1=top1.item()))
 
 
 

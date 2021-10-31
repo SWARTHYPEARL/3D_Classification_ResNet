@@ -413,7 +413,10 @@ class Tensor3D_Dataset(Dataset):
         return self.cache_dict[cache_key]
 
     def Tensor3D_flip(self):
+        glob(self.flip_dir + "/*")
+
         size_dataset = self.__len__()
+        print(size_dataset)
         for target_idx in range(size_dataset):
             data = self.__getitem__(target_idx)
             target, class_num, source = data["target"].float(), data["class_num"], data["source"]

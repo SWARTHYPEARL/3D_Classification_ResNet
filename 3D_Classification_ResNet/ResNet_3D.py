@@ -239,6 +239,25 @@ def r3d_18(pretrained=False, progress=True, **kwargs):
                          layers=[2, 2, 2, 2],
                          stem=BasicStem, **kwargs)
 
+def r3d_34(pretrained=False, progress=True, **kwargs):
+    """Construct 34 layer Resnet3D model as in
+    https://arxiv.org/abs/1711.11248
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on Kinetics-400
+        progress (bool): If True, displays a progress bar of the download to stderr
+
+    Returns:
+        nn.Module: R3D-34 network
+    """
+
+    return _video_resnet('r3d_18',
+                         pretrained, progress,
+                         block=BasicBlock,
+                         conv_makers=[Conv3DSimple] * 4,
+                         layers=[3, 4, 6, 3],
+                         stem=BasicStem, **kwargs)
+
 def load_pretrained_model(model, pretrained_path, n_finetune_classes = None):
     print("loading pretrained model {}".format(pretrained_path))
     pretrained = torch.load(pretrained_path, map_location="cpu")
