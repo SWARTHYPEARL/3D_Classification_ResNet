@@ -42,7 +42,7 @@ def main_worker(device, ngpus_per_node, opt):
 
     if opt.distributed:
         opt.rank = opt.rank * ngpus_per_node + device
-        dist.init_process_group(backend="gloo", init_method="tcp://127.0.0.1:50000",
+        dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:50000",
                                 world_size=opt.world_size, rank=opt.rank)
 
     # create model with parallel or not
