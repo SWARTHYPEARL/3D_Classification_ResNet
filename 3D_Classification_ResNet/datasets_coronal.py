@@ -372,7 +372,7 @@ class Padding3D(object):
 
 class Tensor3D_Dataset(Dataset):
 
-    def __init__(self, tensor_dir: str = None, tensor_list: list = None, cache_num: int = 2000):
+    def __init__(self, tensor_dir: str = None, tensor_list: list = None, cache_num: int = 2000, flip_dir = None):
         """
         Load Tensor format datasets
         :param tensor_dir: directory path of .pt data
@@ -385,6 +385,11 @@ class Tensor3D_Dataset(Dataset):
 
         self.cache_num = cache_num
         self.cache_dict = {}
+
+        self.flip_dir = flip_dir
+
+        if self.flip_dir is not None:
+            self.Tensor3D_flip()
 
 
     def __len__(self):
@@ -406,6 +411,38 @@ class Tensor3D_Dataset(Dataset):
             self.cache_dict[cache_key] = torch.load(self.tensor_list[idx])
 
         return self.cache_dict[cache_key]
+
+    def Tensor3D_flip(self):
+        size_dataset = self.__len__()
+        for target_idx in range(size_dataset):
+            data = self.__getitem__(target_idx)
+            target, class_num, source = data["target"].float(), data["class_num"], data["source"]
+
+            target_flip = torch.flip(target, [2, 3])
+            target_fliplr = torch.fliplr(target)
+            target_flip_fliplr = torch.fliplr(target_flip)
+
+            target_flip_dict = {"target": target_flip, "class_num": class_num, "source": source}
+            target_fliplr_dict = {"target": target_fliplr, "class_num": class_num, "source": source}
+            target_flip_fliplr_dict = {"target": target_flip_fliplr, "class_num": class_num, "source": source}
+
+            temp_filename = str(uuid.uuid4())
+            temp_fullpath = self.flip_dir + "/" + temp_filename + ".pt"
+            torch.save(target_flip_dict, temp_fullpath)
+            self.tensor_list.append(temp_fullpath)
+
+            temp_filename = str(uuid.uuid4())
+            temp_fullpath = self.flip_dir + "/" + temp_filename + ".pt"
+            torch.save(target_fliplr_dict, temp_fullpath)
+            self.tensor_list.append(temp_fullpath)
+
+            temp_filename = str(uuid.uuid4())
+            temp_fullpath = self.flip_dir + "/" + temp_filename + ".pt"
+            torch.save(target_flip_fliplr_dict, temp_fullpath)
+            self.tensor_list.append(temp_fullpath)
+
+
+
 
     def get_tensor_list(self):
         return self.tensor_list

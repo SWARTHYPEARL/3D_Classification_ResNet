@@ -1,61 +1,47 @@
-# roc curve and auc
-from sklearn.datasets import make_classification
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve
-from sklearn.metrics import roc_auc_score
-import matplotlib.pyplot as plt
 
-# generate 2 class dataset
-X, y = make_classification(n_samples=1000, n_classes=2, random_state=1)
-#print(X.flatten().shape)
-#print(y)
+import torch
+from glob import glob
 
-# split into train/test sets
-trainX, testX, trainy, testy = train_test_split(X, y, test_size=0.5, random_state=2)
-#print(trainX.shape)
-#print(testX.shape)
-#print(trainy.shape)
-#print(testy.shape)
+if __name__ == "__main__":
 
-# generate a no skill prediction (majority class)
-ns_probs = [0 for _ in range(len(testy))]
+    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new"
+    for target_path in glob(target_dir + "/*"):
+        data = torch.load(target_path)
+        target, class_num, source = data["target"].float(), data["class_num"], data["source"]
 
-# fit a model
-model = LogisticRegression(solver='lbfgs')
-model.fit(trainX, trainy)
+        print(target.shape)
 
-# predict probabilities
-lr_probs = model.predict_proba(testX)
-#print(lr_probs)
+        #target_1 = torch.flip(target, [1, 2])
+        #print(target_1.shape)
 
-# keep probabilities for the positive outcome only
-lr_probs = lr_probs[:, 1]
+        #target_2 = torch.flip(target, [1, 3])
+        #print(target_2.shape)
 
-# calculate scores
-ns_auc = roc_auc_score(testy, ns_probs)
-lr_auc = roc_auc_score(testy, lr_probs)
-print(testy.shape)
-print(lr_probs.shape)
+        target_3 = torch.flip(target, [2, 3])
+        print(target_3.shape)
 
-# summarize scores
-print('No Skill: ROC AUC=%.3f' % (ns_auc))
-print('Logistic: ROC AUC=%.3f' % (lr_auc))
+        target_4 = torch.fliplr(target)
+        print(target_4.shape)
 
-# calculate roc curves
-ns_fpr, ns_tpr, _ = roc_curve(testy, ns_probs)
-lr_fpr, lr_tpr, _ = roc_curve(testy, lr_probs)
+        break
 
-# plot the roc curve for the model
-plt.plot(ns_fpr, ns_tpr, linestyle='--', label='No Skill')
-plt.plot(lr_fpr, lr_tpr, marker='.', label='Logistic')
+    '''
+    x = torch.arange(8).view(2, 2, 2)
+    print(x)
 
-# axis labels
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
+    # sagittal rotate
+    x1 = torch.flip(x, [0, 1])
+    print(x1)
 
-# show the legend
-plt.legend()
+    # axial rotate
+    x2 = torch.flip(x, [0, 2])
+    print(x2)
 
-# show the plot
-plt.show()
+    # coronal rotate
+    x3 = torch.flip(x, [1, 2])
+    print(x3)
+
+    # mirror
+    x4 = torch.fliplr(x)
+    print(x4)
+    '''
