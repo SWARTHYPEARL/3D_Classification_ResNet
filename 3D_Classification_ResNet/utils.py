@@ -91,7 +91,10 @@ class AverageMeter(object):
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         #return fmtstr.format(**self.__dict__)
-        return fmtstr
+        return fmtstr.format(name=self.name,
+                             val=self.val.item() if type(self.val) == torch.Tensor else self.val,
+                             avg=self.avg.item() if type(self.avg) == torch.Tensor else self.avg)
+        #return fmtstr
 
 class ProgressMeter(object):
     def __init__(self, num_batches, meters, prefix=""):
