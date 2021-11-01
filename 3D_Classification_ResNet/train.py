@@ -113,7 +113,7 @@ def main_worker(device, ngpus_per_node, opt):
             print("=> no checkpoint found at '{}'".format(opt.pretrained_path))
 
     # Data loading code
-    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.datapath_train_list, opt.cache_num, opt.dataset_temp_dir)
+    train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.datapath_train_list, opt.cache_num, opt.dataset_flip_dir)
     if opt.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -529,7 +529,7 @@ def parse_opts_excel():
 
         opt.dataset_train_dir = f_excel["train_dir"][excel_row]
         opt.dataset_val_dir = f_excel["val_dir"][excel_row]
-        opt.dataset_temp_dir = None if f_excel["temp_dir"][excel_row] == "" else f_excel["temp_dir"][excel_row]
+        opt.dataset_flip_dir = None if f_excel["flip_dir"][excel_row] == "" else f_excel["flip_dir"][excel_row]
         opt.cache_num = f_excel["cache_num"][excel_row]
 
         opt.class_normal = [x.strip() for x in f_excel["class_normal"][excel_row].split(",")]
