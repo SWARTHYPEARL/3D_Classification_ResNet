@@ -17,7 +17,7 @@ from utils import AverageMeter, ProgressMeter, accuracy, calculate_accuracy, Log
 from glob import glob
 import pandas as pd
 
-
+best_acc1 = 0
 def main_settings(opt):
 
     opt.distributed = opt.multiprocessing_distributed
@@ -183,7 +183,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt, tb_writer):
             target = target.to(opt.device, non_blocking=True)
             class_num = class_num.long().to(opt.device, non_blocking=True)
 
-        # comput output
+        # compute output
         output = model(target)
         loss = criterion(output, class_num)
 
@@ -244,7 +244,7 @@ def validate(val_loader, model, criterion, scheduler, epoch, opt, tb_writer):
                 target = target.to(opt.device, non_blocking=True)
                 class_num = class_num.long().to(opt.device, non_blocking=True)
 
-            # comput output
+            # compute output
             output = model(target)
             loss = criterion(output, class_num)
 
@@ -264,8 +264,8 @@ def validate(val_loader, model, criterion, scheduler, epoch, opt, tb_writer):
         # TODO: this should also be done with the ProgressMeter
         #print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
         #      .format(top1=top1, top5=top5))
-        print(' * Acc@1 {top1.avg:.3f}'
-              .format(top1=top1.item()))
+        print(' * {top1}'
+              .format(top1=top1))
 
 
 
