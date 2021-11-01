@@ -21,7 +21,8 @@ best_acc1 = 0
 def main_settings(opt):
 
     opt.distributed = opt.multiprocessing_distributed
-    ngpus_per_node = torch.cuda.device_count()
+    #ngpus_per_node = torch.cuda.device_count()
+    ngpus_per_node = opt.ngpus_per_node
     if opt.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -35,7 +36,8 @@ def main_settings(opt):
 
 def main_worker(device, ngpus_per_node, opt):
     global best_acc1
-    opt.device = device
+    #opt.device = device
+    opt.device = opt.device[device] if type(device) is int else device[0]
 
     if opt.device is not None:
         print("Use GPU: {} for training".format(opt.device))
@@ -46,8 +48,11 @@ def main_worker(device, ngpus_per_node, opt):
                                 world_size=opt.world_size, rank=opt.rank)
 
     # create model with parallel or not
-    model = r3d_18().float()
-    #model = r3d_34().float()
+    model = None
+    if opt.arch == "r3d_18":
+        model = r3d_18().float()
+    elif opt.arch == "r3d_34":
+        model = r3d_34().float()
     if opt.pretrained_path is not None:
         model = load_pretrained_model(model, opt.pretrained_path)
 
@@ -516,8 +521,11 @@ def parse_opts_excel():
         #parser = argparse.ArgumentParser()
         opt = parser.parse_args()
 
-        opt.device = None if f_excel["device"][excel_row] == "" else int(f_excel["device"][excel_row])
+        #opt.device = None if f_excel["device"][excel_row] == "" else int(f_excel["device"][excel_row])
+        opt.device = [int(x.strip()) for x in str(f_excel["device"][excel_row]).split(",")]
         #opt.multiGPU = False
+
+        opt.arch = f_excel["arch"][excel_row]
 
         opt.dataset_train_dir = f_excel["train_dir"][excel_row]
         opt.dataset_val_dir = f_excel["val_dir"][excel_row]
@@ -549,6 +557,7 @@ def parse_opts_excel():
         opt.train_multistep_milestones = [eval(step) for step in f_excel["train_multistep_milestones"][excel_row].split(",")]
 
         opt.multiprocessing_distributed = True if str(f_excel["multiprocessing_distributed"][excel_row]) == "True" else False
+        opt.ngpus_per_node = int(f_excel["ngpus_per_node"][excel_row])
         opt.world_size = int(f_excel["world_size"][excel_row])
         opt.rank = int(f_excel["rank"][excel_row])
 
