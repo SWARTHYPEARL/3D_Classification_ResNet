@@ -1,4 +1,4 @@
-시놀로지 nas ntfs mount
+
 from torchvision import transforms
 
 import datasets_coronal
