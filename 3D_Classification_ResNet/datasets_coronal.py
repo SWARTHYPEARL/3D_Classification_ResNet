@@ -79,7 +79,7 @@ class Dicom3D_Coronal_Dataset(Dataset):
 
                 # extract and bind with dicom file and bounding box information
                 target_dicom_list = glob(target_dir_path + self.dicom_dir + "/*")
-                target_dicom_list_sorted = sorted(target_dicom_list, key=lambda x: pydicom.dcmread(x).SliceLocation)
+                target_dicom_list_sorted = sorted(target_dicom_list, key=lambda x: pydicom.dcmread(x).SliceLocation, reverse=True)
                 for target_dicom_path in target_dicom_list_sorted:
                     target_label_path = target_dir_path + self.label_dir + "/" + os.path.basename(target_dicom_path).split(".dcm")[0] + ".txt"
                     if os.path.isfile(target_label_path):
@@ -185,9 +185,9 @@ class Dicom3D_Coronal_Dataset(Dataset):
 
     def load_data_zero_padding(self, idx:int):
         """
-                :param idx: 3D data num in each dicom directory
-                :return: torch Tensor data with Rescaled
-                """
+        :param idx: 3D data num in each dicom directory
+        :return: torch Tensor data with Rescaled
+        """
 
         # get 3D data
         target_3D = {}
@@ -476,7 +476,7 @@ if __name__ == "__main__":
     label_dir = "/labels_yolo"
     dicom_HU_level = 300
     dicom_HU_width = 2500
-    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop"
+    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop_original"
     #data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256"
     #temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
     data_saved = False
