@@ -4,12 +4,14 @@ from glob import glob
 
 if __name__ == "__main__":
 
-    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new"
+    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_normal_candidate"
     for target_path in glob(target_dir + "/*"):
         data = torch.load(target_path)
-        target, class_num, source = data["target"].float(), data["class_num"], data["source"]
+        target, class_num, source = data["target"], data["class_num"], data["source"]
 
         print(target.shape)
+        print(source)
+        print()
 
         #target_1 = torch.flip(target, [1, 2])
         #print(target_1.shape)
@@ -17,13 +19,13 @@ if __name__ == "__main__":
         #target_2 = torch.flip(target, [1, 3])
         #print(target_2.shape)
 
-        target_3 = torch.flip(target, [2, 3])
-        print(target_3.shape)
+        #target_3 = torch.flip(target, [2, 3])
+        #print(target_3.shape)
 
-        target_4 = torch.fliplr(target)
-        print(target_4.shape)
+        #target_4 = torch.fliplr(target)
+        #print(target_4.shape)
 
-        break
+        #break
 
     '''
     x = torch.arange(8).view(2, 2, 2)

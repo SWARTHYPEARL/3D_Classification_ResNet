@@ -25,7 +25,7 @@ SPINE_STATUS = ("m", "b", "sct", "so", "x")
 class Dicom3D_Coronal_Dataset(Dataset):
 
     def __init__(self, data_dir: str, dicom_dir: str, label_dir: str, dicom_HU_level: int, dicom_HU_width: int,
-                 data_savepath: str, data_saved: bool = False, transform=None, cache_num: int = 2000):
+                 data_savepath: str, data_saved: bool = False, transform=None, cache_num: int = 2000, set_status = None):
         """
         :param data_dir: absolute path of directories which contain data
         :param dicom_dir: relative path of dicom directory. ex) /images
@@ -38,6 +38,7 @@ class Dicom3D_Coronal_Dataset(Dataset):
         :param data_saved: whether reformed 3D data exist or not
         :param transform: torch transform
         :param cache_num: number of data for caching
+        :param set_status: set status of all dataset
 
         Per data_dir, one directory -> one study
         Each data contains directory name and spine level to identify
@@ -55,6 +56,8 @@ class Dicom3D_Coronal_Dataset(Dataset):
 
         self.cache_num = cache_num
         self.cache_dict = {}
+
+        self.set_status = set_status
 
         self.data_label_pathlist = []
         self.torchTensor_fullpathlist = []
@@ -98,7 +101,10 @@ class Dicom3D_Coronal_Dataset(Dataset):
                     if len(label_dict[target_spine_level]) == 0:
                         continue
 
-                    target_spine_status = f_excel[target_spine_level][int(os.path.basename(target_dir_name))]
+                    if self.set_status is None:
+                        target_spine_status = f_excel[target_spine_level][int(os.path.basename(target_dir_name))]
+                    else:
+                        target_spine_status = self.set_status
                     if target_spine_status in SPINE_STATUS:
                         label_dict[target_spine_level].insert(0, f"{target_spine_level}-{target_spine_status}-{target_dir_name}")
                     else:
@@ -470,13 +476,18 @@ class Transform_Only(Dataset):
 
 if __name__ == "__main__":
 
-    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914"
+    target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/datasets/normal_candidate/Coronal"
+    #target_dir = "C:/Users/SNUBH/SP_work/Python_Project/yolov3_DICOM/data/billion/bone_coronal_20210914"
     #target_dir = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/datasets"
-    dicom_dir = "/images"
-    label_dir = "/labels_yolo"
+    set_status = "x"
+    dicom_dir = "/dicom"
+    #dicom_dir = "/images"
+    label_dir = "/yolo"
+    #label_dir = "/labels_yolo"
     dicom_HU_level = 300
     dicom_HU_width = 2500
-    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop_original"
+    data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_normal_candidate"
+    #data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_crop_original"
     #data_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_new_256"
     #temp_savepath = "C:/Users/SNUBH/SP_work/Python_Project/3D_Classification_ResNet/temp_test"
     data_saved = False
@@ -488,7 +499,8 @@ if __name__ == "__main__":
         dicom_HU_level=dicom_HU_level,
         dicom_HU_width=dicom_HU_width,
         data_savepath=data_savepath,
-        data_saved=data_saved
+        data_saved=data_saved,
+        set_status=set_status
         #transform=transforms.Compose([
             #ToTensor3D(),
             #Rescale3D((64, 192, 256))
