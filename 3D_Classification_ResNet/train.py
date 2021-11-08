@@ -2,6 +2,7 @@
 import os
 import time
 import argparse
+import shutil
 
 import torch
 import torch.nn as nn
@@ -33,6 +34,9 @@ def main_settings(opt):
     else:
         # Simply call main_worker function
         main_worker(opt.device, ngpus_per_node, opt)
+
+    if opt.dataset_flip_dir is not None:
+        shutil.rmtree(opt.dataset_flip_dir)
 
 def main_worker(device, ngpus_per_node, opt):
     global best_acc1
@@ -153,6 +157,7 @@ def main_worker(device, ngpus_per_node, opt):
                 if opt.train_scheduler is not None:
                     ckpt["scheduler"] = scheduler.state_dict()
                 torch.save(ckpt, ckpt_path)
+
 
 def train(train_loader, model, criterion, optimizer, epoch, opt, tb_writer):
     batch_time = AverageMeter('Time', ':6.3f')

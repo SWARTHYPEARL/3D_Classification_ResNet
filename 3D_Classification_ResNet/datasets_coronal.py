@@ -395,6 +395,8 @@ class Tensor3D_Dataset(Dataset):
         self.flip_dir = flip_dir
 
         if self.flip_dir is not None:
+            if not os.path.isdir(self.flip_dir):
+                os.makedirs(self.flip_dir)
             self.Tensor3D_flip()
 
 
