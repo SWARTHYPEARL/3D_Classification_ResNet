@@ -36,7 +36,8 @@ def main_settings(opt):
         main_worker(opt.device, ngpus_per_node, opt)
 
     if opt.dataset_flip_dir is not None:
-        shutil.rmtree(opt.dataset_flip_dir)
+        for file_flipped in os.scandir(opt.dataset_flip_dir):
+            os.remove(file_flipped.path)
 
 def main_worker(device, ngpus_per_node, opt):
     global best_acc1
