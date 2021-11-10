@@ -38,7 +38,7 @@ def test_model(opt):
         #torch.cuda.set_device(opt.device)
         #model = model.to(opt.device)
         #model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[opt.device])
-        model = torch.nn.parallel.DistributedDataParallel(model)
+        model = torch.nn.DataParallel(model).cuda()
     torch.cuda.set_device(opt.device)
     model = model.to(opt.device)
     print(opt.device)
