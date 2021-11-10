@@ -32,6 +32,7 @@ def test_model(opt):
     elif opt.arch == "r3d_34":
         model = r3d_34().float()
 
+    print("I was here..")
     if opt.multiprocessing_distributed:
         dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:50000", world_size=1, rank=1)
         torch.cuda.set_device(opt.device)
