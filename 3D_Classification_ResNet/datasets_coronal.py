@@ -476,6 +476,28 @@ class Transform_Only(Dataset):
             temp_fullpath = self.save_dir + "/" + temp_filename + ".pt"
             torch.save(target_Tensor, temp_fullpath)
 
+def datalist_from_yolo(text_path: str, temp_dataset_path: str, class_normal: list, class_abnormal: list):
+
+    data_list = []
+    for target_line in open(text_path, "r").readlines():
+        target_id = target_line.split("\\")[-3]
+        if target_id not in data_list:
+            data_list.append(target_id)
+
+    target_list = []
+    for target_path in glob(temp_dataset_path + "/*.pt"):
+        target_3D = torch.load(target_path)
+        class_num, source = target_3D["class_num"], target_3D["source"]
+
+        if (SPINE_STATUS[int(class_num)] not in class_normal) and (
+                SPINE_STATUS[int(class_num)] not in class_abnormal):
+            continue
+
+        # print(source[0])
+        if source[0] in data_list:
+            target_list.append(target_path)
+
+    return target_list
 
 if __name__ == "__main__":
 

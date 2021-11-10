@@ -13,7 +13,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 
 from ResNet_3D import r3d_18, r3d_34, load_pretrained_model
-from datasets_coronal import Tensor3D_Dataset, SPINE_STATUS
+from datasets_coronal import Tensor3D_Dataset, datalist_from_yolo, SPINE_STATUS
 from utils import AverageMeter, ProgressMeter, accuracy, calculate_accuracy, Logger, get_lr
 from glob import glob
 import pandas as pd
@@ -58,8 +58,6 @@ def main_worker(device, ngpus_per_node, opt):
         model = r3d_18().float()
     elif opt.arch == "r3d_34":
         model = r3d_34().float()
-    if opt.pretrained_path is not None:
-        model = load_pretrained_model(model, opt.pretrained_path)
 
     if opt.distributed:
         if opt.device is not None:
@@ -486,29 +484,6 @@ def train_model(opt):
             if opt.train_scheduler is not None:
                 ckpt["scheduler"] = scheduler.state_dict()
             torch.save(ckpt, ckpt_path)
-
-def datalist_from_yolo(text_path: str, temp_dataset_path: str, class_normal: list, class_abnormal: list):
-
-    data_list = []
-    for target_line in open(text_path, "r").readlines():
-        target_id = target_line.split("\\")[-3]
-        if target_id not in data_list:
-            data_list.append(target_id)
-
-    target_list = []
-    for target_path in glob(temp_dataset_path + "/*.pt"):
-        target_3D = torch.load(target_path)
-        class_num, source = target_3D["class_num"], target_3D["source"]
-
-        if (SPINE_STATUS[int(class_num)] not in class_normal) and (
-                SPINE_STATUS[int(class_num)] not in class_abnormal):
-            continue
-
-        # print(source[0])
-        if source[0] in data_list:
-            target_list.append(target_path)
-
-    return target_list
 
 def parse_opts_excel():
 
