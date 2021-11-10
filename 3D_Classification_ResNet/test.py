@@ -33,7 +33,7 @@ def test_model(opt):
         model = r3d_34().float()
 
     if opt.multiprocessing_distributed:
-        dist.init_process_group(backend="mpi")
+        dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:50000", world_size=1, rank=1)
         torch.cuda.set_device(opt.device)
         model = model.to(opt.device)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[opt.device])
