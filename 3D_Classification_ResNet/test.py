@@ -48,8 +48,7 @@ def test_model(opt):
     progress = ProgressMeter(
         len(test_loader),
         # [batch_time, data_time, losses, top1, top5],
-        [batch_time, data_time],
-        prefix="[{}/{}]\t".format(len(test_loader)))
+        [batch_time, data_time])
 
     model.eval()
 
