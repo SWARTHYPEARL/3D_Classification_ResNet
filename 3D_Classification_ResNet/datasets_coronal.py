@@ -356,7 +356,7 @@ class Padding3D(object):
             target_slice = target_slice.unsqueeze(0)
             target_slice = target_slice.unsqueeze(0)
 
-            target_slice_resize = torch.nn.functional.interpolate(target_slice, self.output_size[1:])
+            target_slice_resize = torch.nn.functional.interpolate(target_slice, self.output_size[1:], mode="bilinear")
             if target_resize is None:
                 target_resize = target_slice_resize.detach().clone()
             else:

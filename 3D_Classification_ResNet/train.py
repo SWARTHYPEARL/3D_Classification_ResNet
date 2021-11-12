@@ -109,6 +109,7 @@ def main_worker(device, ngpus_per_node, opt):
             if opt.device is not None:
                 # best_acc1 may be from a checkpoint from a different GPU
                 best_acc1 = best_acc1.to(opt.device)
+            model.load_state_dict(checkpoint["state_dict"])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(opt.pretrained_path, checkpoint['epoch']))
@@ -117,6 +118,9 @@ def main_worker(device, ngpus_per_node, opt):
 
     # Data loading code
     train_dataset = Tensor3D_Dataset(opt.dataset_train_dir, opt.datapath_train_list, opt.cache_num, opt.dataset_flip_dir)
+    if opt.dataset_train_add_dir is not None:
+        train_add_dataset = Tensor3D_Dataset(tensor_list=glob(opt.dataset_train_add_dir + "/*"), cache_num=opt.cache_num, flip_dir=opt.dataset_flip_dir)
+        train_dataset = torch.utils.data.ConcatDataset([train_dataset, train_add_dataset])
     if opt.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -512,6 +516,7 @@ def parse_opts_excel():
         opt.dataset_val_dir = f_excel["val_dir"][excel_row]
         opt.dataset_flip_dir = None if f_excel["flip_dir"][excel_row] == "" else f_excel["flip_dir"][excel_row]
         opt.cache_num = f_excel["cache_num"][excel_row]
+        opt.dataset_train_add_dir = None if f_excel["train_add_dir"][excel_row] == "" else f_excel["train_add_dir"][excel_row]
 
         opt.class_normal = [x.strip() for x in f_excel["class_normal"][excel_row].split(",")]
         opt.class_abnormal = [x.strip() for x in f_excel["class_abnormal"][excel_row].split(",")]

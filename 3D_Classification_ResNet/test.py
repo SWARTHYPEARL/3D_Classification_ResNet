@@ -5,7 +5,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 from ResNet_3D import r3d_18, r3d_34, load_pretrained_model
-from datasets_coronal import Tensor3D_Dataset, datalist_from_yolo
+from datasets_coronal import Tensor3D_Dataset, datalist_from_yolo, SPINE_STATUS
 
 from sklearn import metrics
 import matplotlib.pyplot as plt
@@ -16,15 +16,19 @@ import argparse
 from utils import AverageMeter, ProgressMeter
 from collections import defaultdict
 
+import os
 import pandas as pd
 import numpy as np
 
 
 def test_model(opt):
-    opt.device = opt.device if type(opt.device) is int else opt.device[0]
+    # make save directory
+    #if not os.path.isdir(opt.test_save_path):
+    if not os.path.isdir(os.path.dirname(opt.test_save_path)):
+        #os.makedirs(opt.test_save_path)
+        os.makedirs(os.path.dirname(opt.test_save_path))
 
-    test_dataset = Tensor3D_Dataset(opt.dataset_dir, opt.data_pathlist)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
+    opt.device = opt.device if type(opt.device) is int else opt.device[0]
 
     model = None
     if opt.arch == "r3d_18":
@@ -32,16 +36,18 @@ def test_model(opt):
     elif opt.arch == "r3d_34":
         model = r3d_34().float()
 
-    print("I was here..")
     if opt.multiprocessing_distributed:
-        #dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:50000", world_size=1, rank=1)
-        #torch.cuda.set_device(opt.device)
-        #model = model.to(opt.device)
-        #model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[opt.device])
         model = torch.nn.DataParallel(model).cuda()
     torch.cuda.set_device(opt.device)
     model = model.to(opt.device)
     print(opt.device)
+
+    loc = 'cuda:{}'.format(opt.device)
+    checkpoint = torch.load(opt.pretrained_path, map_location=loc)
+    model.load_state_dict(checkpoint["state_dict"])
+
+    test_dataset = Tensor3D_Dataset(opt.dataset_dir, opt.data_pathlist)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
 
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
@@ -61,10 +67,15 @@ def test_model(opt):
             # measure data loading time
             data_time.update(time.time() - end_time)
 
-            inputs, labels = data["target"].to(opt.device), data["class_num"].to(opt.device)
-            source = data["source"]
-            # print(f"inputs: {inputs}")
-            # print(f"labels: {labels}")
+            inputs, class_num, source = data["target"].to(opt.device), data["class_num"], data["source"]
+            class_num = torch.transpose(class_num, 0, 1).squeeze(0)
+            for class_num_idx, class_num_elmt in enumerate(class_num):
+                if SPINE_STATUS[int(class_num_elmt)] in opt.class_normal:
+                    class_num[class_num_idx] = 0
+                elif SPINE_STATUS[int(class_num_elmt)] in opt.class_abnormal:
+                    class_num[class_num_idx] = 1
+                else:
+                    raise IndexError
 
             outputs = model(inputs.float())
             outputs_act = activation(outputs)
@@ -73,7 +84,7 @@ def test_model(opt):
             # _, predicted = torch.max(outputs.data, 1)
             _, predicted = torch.max(outputs_act.data, 1)
             #label_truth = torch.tensor([0 if label_list[0] == 1 else 1 for label_list in labels]).to(device)  # just for binary class
-            label_truth = labels
+            label_truth = class_num
 
             #print(outputs_act)
             #print(label_truth)
@@ -93,7 +104,7 @@ def test_model(opt):
             batch_time.update(time.time() - end_time)
             end_time = time.time()
 
-            progress.display(i)
+            #progress.display(i)
 
     del model
 
